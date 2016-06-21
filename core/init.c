@@ -555,10 +555,88 @@ void __noreturn load_and_boot_kernel(bool is_reboot)
 	start_kernel(kernel_entry, fdt, mem_top);
 }
 
+/*
+ * Size of the reserved region at the top of the NVDIMM region
+ * linux expects that the NVDIMM region can be section aligned
+ * (i.e. 16MB) so we can't really use anything smaller.
+ */
+#define NVM_RESERVE_SIZE (16 * 1024 * 1024)
+
+static void add_nvmem_node(u64 base, u64 length)
+{
+	struct dt_node *new;
+	u64 reg[4] = {base, length - NVM_RESERVE_SIZE, base + length - NVM_RESERVE_SIZE, NVM_RESERVE_SIZE};
+
+	assert(length > NVM_RESERVE_SIZE);
+
+	new = dt_new_addr(dt_root, "nvmem", base);
+
+	dt_add_property_string(new, "compatible", "ibm,contutto-nvmem");
+	dt_add_property_string(new, "type", "fake");
+	dt_add_property_u64s(new, "reg", reg[0], reg[1], reg[2], reg[3]);
+}
+
+/*
+ * Steals memory from the system memory nodes and converts it into a fake
+ * contutto (persistent memory) device.
+ */
+static void steal_memory(u64 max_size)
+{
+	struct dt_node *n, *mem_node = NULL;
+	u64 *chosen_reg = NULL;
+	u64 base;
+	u64 length;
+
+        dt_for_each_node(dt_root, n) {
+		u64 *reg;
+
+                if (!dt_has_node_property(n, "device_type", "memory"))
+                        continue;
+
+		reg = (u64 *) dt_prop_get(n, "reg");
+		if (!reg) {
+			printf("no reg?\n");
+			continue;
+		}
+
+		printf("NVDIMM: found mem node '%s'\n", n->name);
+
+		/* we don't want memory@0 since that's hardcoded in a few places
+		 * stealing an entire memory@<number> node allows us to keep the
+		 * chip-id and friends.
+		 */
+		if (!chosen_reg || reg[0] > chosen_reg[0]) {
+			mem_node = n;
+			chosen_reg = reg;
+		}
+        }
+
+#define min(x, y) ((x) <= (y) ? (x) : (y))
+
+	if (chosen_reg) {
+		printf("NVDIMM: chose memory node '%s'\n", mem_node->name);
+
+		/* Either borrow 1/4 of the memory node or max_size bytes */
+		length = min(chosen_reg[1] / 4, max_size);
+		base = chosen_reg[0] + chosen_reg[1] - length;
+
+		/*
+		 * We REALLY shouldn't be modifying the devicetree, but we're
+		 * doing gross hacks anyway so who cares.
+		 */
+		printf("NVDIMM: stealing top %llu MB\n", length / 1024 / 1024);
+		chosen_reg[1] -= length;
+
+		add_nvmem_node(base, length);
+	}
+}
+
+
 static void dt_fixups(void)
 {
 	struct dt_node *n;
 	struct dt_node *primary_lpc = NULL;
+	int i;
 
 	/* lpc node missing #address/size cells. Also pick one as
 	 * primary for now (TBD: How to convey that from HB)
@@ -582,6 +660,16 @@ static void dt_fixups(void)
 		if (!dt_has_node_property(n, "scom-controller", NULL))
 			dt_add_property(n, "scom-controller", NULL, 0);
 	}
+
+
+#define NVRAM_STEAL_SIZE (128ul * 1024ul * 1024ul)
+#define NVRAM_REGIONS    2
+
+	/* Populate NVDIMM ranges */
+	for (i = 0; i < NVRAM_REGIONS; i++) {
+		steal_memory(NVRAM_STEAL_SIZE);
+	}
+
 }
 
 static void add_arch_vector(void)
