@@ -179,3 +179,60 @@ int nvram_check(void *nvram_image, const uint32_t nvram_size)
  failed:
 	return -1;
 }
+
+static const char *find_next_key(const char *start, const char *end)
+{
+	while (start < end) {
+		if (*start == 0)
+			return start + 1;
+
+		start++;
+	}
+
+	return end;
+}
+
+/*
+ * nvram_query() - Returns the value associated with a key. The ibm,skiboot
+ * partition contains a set of key=value pairs separated by NUL terminators.
+ */
+const char *nvram_query(const char *key, size_t *length)
+{
+	const char *part_end = (const char *) skiboot_part_hdr +
+		skiboot_part_hdr->len * 16;
+	const char *start = (const char *) skiboot_part_hdr +
+		sizeof(*skiboot_part_hdr);
+	const char *end = find_next_key(start, part_end);
+	int key_len = strlen(key);
+
+	if (!key_len) {
+		prlog(PR_WARNING, "NVRAM: search key is empty!\n");
+		return NULL;
+	}
+
+	if (key_len > 32)
+		prlog(PR_WARNING, "NVRAM: search key '%s' is longer than 32 chars\n", key);
+
+	while (start < end) {
+		int remaining = part_end - start;
+
+		prlog(PR_TRACE, "NVRAM: '%s' (%lu)\n", start, strlen(start));
+
+		if (key_len + 1 > remaining)
+			return NULL;
+
+		if (!strncmp(key, start, key_len) && start[key_len] == '=') {
+			const char *value = &start[key_len + 1];
+
+			if (length)
+				*length = end - value;
+
+			return value;
+		}
+
+		start = end;
+		end = find_next_key(end, part_end);
+	}
+
+	return NULL;
+}
