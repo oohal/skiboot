@@ -105,6 +105,12 @@ HDIF_child_arr(const struct HDIF_common_hdr *hdif, unsigned int idx)
 	return &children[idx];
 }
 
+
+/*
+ * TODO: we can simplfy this a lot by ditching the child ptr and just
+ *       using the index
+ */
+
 struct HDIF_common_hdr *HDIF_child(const struct HDIF_common_hdr *hdif,
 				   const struct HDIF_child_ptr *child,
 				   unsigned int idx,
