@@ -109,12 +109,15 @@ enum proc_gen proc_gen = proc_gen_p7;
 
 static void *ntuple_addr(const struct spira_ntuple *n)
 {
-	uint64_t addr = be64_to_cpu(n->addr);
+	//uint64_t addr = be64_to_cpu(n->addr);
 	if (n->addr == 0)
 		return NULL;
+	return (void *) be64_to_cpu(n->addr);
+/*
 	assert(addr >= base_addr);
 	assert(addr < base_addr + spira_heap_size);
 	return spira_heap + ((unsigned long)addr - base_addr);
+	*/
 }
 
 /* Make sure valgrind knows these are undefined bytes. */
@@ -127,6 +130,8 @@ int main(int argc, char *argv[])
 {
 	int fd, r, i = 0, opt_count = 0;
 	bool verbose = false, quiet = false, tree_only = false, new_spira = false;
+	struct spira_ntuple *t, *end;
+	int t_count;
 
 	while (argv[++i]) {
 		if (strcmp(argv[i], "-v") == 0) {
@@ -183,18 +188,20 @@ int main(int argc, char *argv[])
 		base_addr = be64_to_cpu(spira.ntuples.heap.addr);
 	}
 
+
+
 	if (!base_addr)
 		errx(1, "Invalid base addr");
 	if (verbose)
 		printf("verbose: map.base_addr = %llx\n", (long long)base_addr);
 
-	fd = open(argv[2], O_RDONLY);
+	fd = open(argv[2], O_RDWR);
 	if (fd < 0)
 		err(1, "opening %s", argv[2]);
 	spira_heap_size = lseek(fd, 0, SEEK_END);
 	if (spira_heap_size < 0)
 		err(1, "lseek on %s", argv[2]);
-	spira_heap = mmap(NULL, spira_heap_size, PROT_READ, MAP_SHARED, fd, 0);
+	spira_heap = mmap(NULL, spira_heap_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (spira_heap == MAP_FAILED)
 		err(1, "mmaping %s", argv[3]);
 	if (verbose)
@@ -202,12 +209,33 @@ int main(int argc, char *argv[])
 		       spira_heap_size, spira_heap);
 	close(fd);
 
-	if (new_spira)
+	if (new_spira) {
 		spiras = (struct spiras *)spira_heap;
+		t   = (void *) &spiras->ntuples.sp_subsys;
+		t_count = be32_to_cpu(spiras->ntuples.array_hdr.ecnt);
+	} else {
+		t = (void *) &spira.ntuples.sp_subsys;
+		t_count = be32_to_cpu(spira.ntuples.array_hdr.ecnt);
+	}
 
 	if (quiet) {
 		fclose(stdout);
 		fclose(stderr);
+	}
+
+	/* fix the tuple pointers */
+	fprintf(stderr, "base adr: %#lx heap: %p\n", base_addr, spira_heap);
+	end = t + t_count;
+	for (; t < end; t++) {
+		uint64_t offset = be64_to_cpu(t->addr) - base_addr;
+		uint64_t fixed = (u64) spira_heap + offset;
+
+		if (!t->addr)
+			fixed = 0;
+
+		fprintf(stderr, "pr: %#lx post %#lx\n", be64_to_cpu(t->addr), fixed);
+
+		t->addr = cpu_to_be64(fixed);
 	}
 
 	parse_hdat(false, 0);
