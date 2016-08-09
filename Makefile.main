@@ -44,7 +44,7 @@ VALGRIND=valgrind -q --show-reachable=yes --error-exitcode=99
 
 # Target options
 
-OPTS=-Os -ffunction-sections
+OPTS=-O1 -ffunction-sections -g
 DBG=-g
 
 CPPFLAGS := -I$(SRC)/include -Iinclude -MMD -include $(SRC)/include/config.h

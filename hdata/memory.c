@@ -138,7 +138,7 @@ static bool add_address_range(struct dt_node *root,
 	reg[1] = cleanup_addr(be64_to_cpu(arange->end)) - reg[0];
 
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED) {
-		/* Only enter shared nodes once. */ 
+		/* Only enter shared nodes once. */
 		mem = find_shared(root, be16_to_cpu(id->share_id),
 				  reg[0], reg[1]);
 		if (mem) {

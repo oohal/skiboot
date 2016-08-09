@@ -1,5 +1,8 @@
-CC ?= $(CROSS_COMPILE)gcc
-LD ?= $(CROSS_COMPILE)ld
+ifdef CROSS_COMPILE
+CC = $(CROSS_COMPILE)gcc
+LD = $(CROSS_COMPILE)ld
+endif
+
 ARCH := $(shell $(GET_ARCH) "$(CROSS_COMPILE)")
 
 ifeq ($(ARCH),ARCH_ARM)

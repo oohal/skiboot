@@ -100,8 +100,12 @@ struct dt_node *add_ics_node(void)
 #include "../../core/device.c"
 #include "../../core/chip.c"
 #include "../../test/dt_common.c"
+#include "../validate.c"
 
 #include <err.h>
+
+
+struct heap sp;
 
 char __rodata_start[1], __rodata_end[1];
 
@@ -109,15 +113,18 @@ enum proc_gen proc_gen = proc_gen_p7;
 
 static void *ntuple_addr(const struct spira_ntuple *n)
 {
-	//uint64_t addr = be64_to_cpu(n->addr);
+	uint64_t addr = be64_to_cpu(n->addr);
+	void *ret = spira_heap + ((unsigned long)addr - base_addr);
+	struct HDIF_common_hdr *h = ret;
+
 	if (n->addr == 0)
 		return NULL;
-	return (void *) be64_to_cpu(n->addr);
-/*
+
+	fprintf(stderr, "validating %.6s: %s\n", h->id, hdat_validate(&sp, ret) ? "true" : "false");
+
 	assert(addr >= base_addr);
 	assert(addr < base_addr + spira_heap_size);
 	return spira_heap + ((unsigned long)addr - base_addr);
-	*/
 }
 
 /* Make sure valgrind knows these are undefined bytes. */
@@ -188,8 +195,6 @@ int main(int argc, char *argv[])
 		base_addr = be64_to_cpu(spira.ntuples.heap.addr);
 	}
 
-
-
 	if (!base_addr)
 		errx(1, "Invalid base addr");
 	if (verbose)
@@ -219,9 +224,12 @@ int main(int argc, char *argv[])
 	}
 
 	if (quiet) {
-		fclose(stdout);
 		fclose(stderr);
 	}
+		fclose(stdout);
+
+	sp.base = spira_heap;
+	sp.size = spira_heap_size;
 
 	/* fix the tuple pointers */
 	fprintf(stderr, "base adr: %#lx heap: %p\n", base_addr, spira_heap);
@@ -235,7 +243,7 @@ int main(int argc, char *argv[])
 
 		fprintf(stderr, "pr: %#lx post %#lx\n", be64_to_cpu(t->addr), fixed);
 
-		t->addr = cpu_to_be64(fixed);
+	//	t->addr = cpu_to_be64(fixed);
 	}
 
 	parse_hdat(false, 0);
