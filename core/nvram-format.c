@@ -256,3 +256,14 @@ const char *nvram_query(const char *key)
 
 	return NULL;
 }
+
+
+bool nvram_query_is(const char *key, const char *value)
+{
+	const char *s = nvram_query(key);
+
+	if (!s)
+		return false;
+
+	return !strcmp(s, value);
+}
