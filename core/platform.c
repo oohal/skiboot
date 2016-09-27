@@ -54,10 +54,10 @@ static int64_t opal_cec_reboot(void)
 
 	console_complete_flush();
 
-#ifdef ENABLE_FAST_RESET
 	/* Try a fast reset first */
-	fast_reset();
-#endif
+	if(nvram_query_is("fast-reboot", "enabled"))
+		fast_reset();
+
 	if (platform.cec_reboot)
 		return platform.cec_reboot();
 
