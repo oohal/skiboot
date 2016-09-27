@@ -214,6 +214,15 @@ const char *nvram_query(const char *key)
 		sizeof(*skiboot_part_hdr);
 	int key_len = strlen(key);
 
+	/*
+	 * The running OS can modify the NVRAM as it pleases so we need to be
+	 * a little paranoid and check that it's ok before we try parse it.
+	 */
+	if (!nvram_validate()) {
+		prerror("NVRAM: Look up for '%s' failed due to bad format!\n", key);
+		return NULL;
+	}
+
 	if (!key_len) {
 		prlog(PR_WARNING, "NVRAM: search key is empty!\n");
 		return NULL;
