@@ -17,5 +17,7 @@ STDIO_OBJS = vfprintf.o vsnprintf.o fprintf.o \
 	     setvbuf.o fputc.o puts.o fputs.o putchar.o \
 	     stdchnls.o fileno.o snprintf.o
 
+CFLAGS_SKIP_libc/stdio/vsnprint.o += -pg
+
 STDIO = $(LIBCDIR)/stdio/built-in.o
 $(STDIO): $(STDIO_OBJS:%=$(LIBCDIR)/stdio/%)

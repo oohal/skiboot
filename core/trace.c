@@ -243,3 +243,21 @@ void init_trace_buffers(void)
 	/* Trace node in DT. */
 	trace_add_dt_props();
 }
+
+#define UNK_STR "unknown function\n"
+
+extern void mambo_write(const char *buf, size_t count);
+
+void __nomcount __mcount_trace(unsigned long addr);
+void __nomcount __mcount_trace(unsigned long addr)
+{
+	char *start, *end;
+
+	if (!trace_on)
+		return;
+
+	if (get_symbol(addr, &start, &end)) {
+		mambo_write(start, (unsigned long) (end - start)); mambo_write("\n", 1);
+	} else
+		mambo_write(UNK_STR, sizeof(UNK_STR) - 1);
+}

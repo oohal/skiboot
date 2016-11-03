@@ -81,7 +81,7 @@ ifeq ($(STACK_CHECK),1)
 CFLAGS += -fstack-protector-all -pg
 CPPFLAGS += -DSTACK_CHECK_ENABLED
 else
-CFLAGS += -fstack-protector
+CFLAGS += -fstack-protector -pg
 CFLAGS += $(call try-cflag,$(CC),-fstack-protector-strong)
 endif
 

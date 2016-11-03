@@ -20,4 +20,8 @@ CFLAGS_SKIP_core/relocate.o = -pg -fstack-protector-all
 CFLAGS_SKIP_core/relocate.o += -fstack-protector -fstack-protector-strong
 CFLAGS_SKIP_core/relocate.o += -fprofile-arcs -ftest-coverage
 
+CFLAGS_SKIP_core/console.o = -pg
+CFLAGS_SKIP_core/console_log.o = -pg
+CFLAGS_SKIP_core/utils.o = -pg
+
 $(CORE): $(CORE_OBJS:%=core/%)

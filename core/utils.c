@@ -64,6 +64,9 @@ char __attrconst tohex(uint8_t nibble)
 	return __tohex[nibble];
 }
 
+/*
+ * When this returns *sym is the start of the symbol name, *sym_end is the end of it.
+ */
 unsigned long get_symbol(unsigned long addr, char **sym, char **sym_end)
 {
 	unsigned long prev = 0, next;

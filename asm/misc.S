@@ -49,6 +49,11 @@ _mcount:
 	mr	%r3,%r1
 	mflr	%r4
 	b	__mcount_stack_check
+#else
+.global _mcount
+_mcount:
+	mflr	%r3
+	b	__mcount_trace
 #endif
 
 .global mambo_read

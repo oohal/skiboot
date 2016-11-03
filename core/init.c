@@ -692,6 +692,7 @@ void main_cpu_entry(const void *fdt);
 
 void __noreturn __nomcount main_cpu_entry(const void *fdt)
 {
+	enable_mambo_console();
 	/*
 	 * WARNING: At this point. the timebases have
 	 * *not* been synchronized yet. Do not use any timebase
