@@ -277,6 +277,7 @@ static void __nomcount pr_hex(unsigned long ptr)
 static struct lrstack *__nomcount get_top(struct lrstack *base)
 {
 	base->index++;
+	base[base->index].index = base->index;
 	return base + base->index;
 }
 
@@ -294,13 +295,21 @@ void __mexit(void);
 void __nomcount __mcount_trace(unsigned long lr_addr, unsigned long *saved_lr, struct lrstack *base);
 void __nomcount __mcount_trace(unsigned long lr_addr, unsigned long *saved_lr, struct lrstack *base)
 {
-	struct lrstack *slot = get_top(base);
+	struct lrstack *slot;
 	char *start, *end;
+	int i;
 
 	if (!trace_on)
 		return;
 
-	mprint("lr sym: ");
+
+       	slot = get_top(base);
+	i = slot->index;
+
+	while(i-- > 0)
+		mambo_write(" ", 1);
+
+	mprint("-> lr sym: ");
 	if (get_symbol(lr_addr, &start, &end))
 		mambo_write(start, (unsigned long) (end - start));
 	else
@@ -337,6 +346,8 @@ unsigned long __nomcount __mcount_exit(unsigned long ret, unsigned long *restore
 	struct lrstack *slot = pop_top(base);
 	*restore_lr = slot->saved_lr;
 
+	while(slot->index--)
+		mambo_write(" ", 1);
 	mprint("<- "); mambo_write(slot->name, slot->length); mprint("\n");
 
 	return ret;
