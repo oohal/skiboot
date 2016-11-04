@@ -892,7 +892,9 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 		platform.init();
 
 	/* Read in NVRAM and set it up */
+	trace_on = 1;
 	nvram_init();
+	trace_on = 0;
 
 	/* Secure/Trusted Boot init. We look for /ibm,secureboot in DT */
 	stb_init();

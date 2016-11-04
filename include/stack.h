@@ -25,7 +25,7 @@
 #define STACK_ENTRY_SOFTPATCH	0x1500	/* Soft patch (denorm emulation) */
 
 /* Safety/ABI gap at top of stack */
-#define STACK_TOP_GAP		0x100
+#define STACK_TOP_GAP		0x200
 
 /* Remaining stack space (gap included) */
 #define NORMAL_STACK_SIZE	STACK_SIZE
@@ -33,6 +33,9 @@
 /* Offset to get to normal CPU stacks */
 #define CPU_STACKS_OFFSET	(CPU_STACKS_BASE + \
 				 NORMAL_STACK_SIZE - STACK_TOP_GAP)
+
+#define CPU_LR_STACKS_OFFSET	(CPU_STACKS_BASE + \
+				 NORMAL_STACK_SIZE - STACK_TOP_GAP + 0x100)
 
 /* Gap below the stack. If our stack checker sees the stack below that
  * gap, it will flag a stack overflow

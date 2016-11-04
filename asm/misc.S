@@ -19,6 +19,11 @@
 #include <processor.h>
 #include <stack.h>
 
+#define GET_LR_STACK(stack_reg,pir_reg)				\
+	sldi	stack_reg,pir_reg,STACK_SHIFT;			\
+	addis	stack_reg,stack_reg,CPU_LR_STACKS_OFFSET@ha;	\
+	addi	stack_reg,stack_reg,CPU_LR_STACKS_OFFSET@l;
+
 	.section ".text","ax"
 	.balign	0x10
 
@@ -50,11 +55,61 @@ _mcount:
 	mflr	%r4
 	b	__mcount_stack_check
 #else
+
+
+/* entry tracing - call into mcount */
+
+/* exit tracing:
+	1. push LRSAVE on the LRSTACK
+	2. overwrite LRSAVE in the stack frame of the function that called into
+		mcount
+	3. on mexit, pop off the LRSTACK and return into the intended function
+*/
+
+/* When tracing is enabled we do the following:
+  Establish a new stack frame */
+
+
+/*
+ *	when mcount gets called we are:
+ *		mcount          (no stack frame)
+ *		traced_function (current stack frame)
+ *		parent_function
+ *
+ *	We need to patch LRSAVE in the parent function's stack frame so
+ *	it returns to __mexit rather than the parent. inside __mexit we'll
+ *	fix things up and resume normal control flow.
+ *
+ **/
+
 .global _mcount
 _mcount:
+	/* ok, lets mangle the stack */
+	ld	%r4,0(%r1) // grab the backchain pointer
+	addi	%r4,%r4,16
 	mflr	%r3
+	mfspr	%r5,SPR_PIR
+	GET_LR_STACK(%r5, %r5)
 	b	__mcount_trace
+
+/* landing point - when the traced function returns we end up here, all we need
+ * to do here is preserve the return value which we do by leaving it in r3
+ * so it's passed in as an argument. The C code is then responsible for keeping
+ * the value saved.
+ *
+ * At this point the traced function has returned so r1 points to
+ * parent_function's stack frame. Restoring LRSAVE to it's original
+ * value (written there by traced_function) will resume the program normally.
+ */
+.global __mexit
+__mexit:
+	addi	%r4,%r1,16
+	mfspr	%r5,SPR_PIR
+	GET_LR_STACK(%r5, %r5)
+	b __mcount_exit
+
 #endif
+
 
 .global mambo_read
 mambo_read:

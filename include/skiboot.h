@@ -287,4 +287,6 @@ extern void enter_pm_state(bool winkle);
 extern uint32_t reset_patch_start;
 extern uint32_t reset_patch_end;
 
+extern int trace_on;
+
 #endif /* __SKIBOOT_H */

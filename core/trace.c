@@ -244,20 +244,101 @@ void init_trace_buffers(void)
 	trace_add_dt_props();
 }
 
-#define UNK_STR "unknown function\n"
+#define UNK_STR "unknown function"
+#define UNK_EXIT "exit"
+
+struct lrstack {
+	int index;
+	unsigned long saved_lr;
+	const char *name;
+	int length;
+};
 
 extern void mambo_write(const char *buf, size_t count);
 
-void __nomcount __mcount_trace(unsigned long addr);
-void __nomcount __mcount_trace(unsigned long addr)
+unsigned long __nomcount __mcount_exit(unsigned long ret, unsigned long *restore_lr, struct lrstack *base);
+
+static void __nomcount pr_hex(unsigned long ptr)
 {
+	int i;
+	char c;
+
+	for(i = 15; i > 0; i--) {
+		int a = (ptr >> (i * 4)) & 0xF;
+		c = '0' + a;
+		if(a > 9)
+			c = 'A' + a - 10;
+		mambo_write(&c, 1);
+	}
+}
+
+
+/* stack slot zero is a placeholder, we just use it to store the stack depth */
+static struct lrstack *__nomcount get_top(struct lrstack *base)
+{
+	base->index++;
+	return base + base->index;
+}
+
+static struct lrstack *__nomcount pop_top(struct lrstack *base)
+{
+	return base + base->index--;
+}
+
+#define mprint(str) mambo_write(str, (sizeof(str) - 1))
+
+int trace_on = 0;
+
+void __mexit(void);
+
+void __nomcount __mcount_trace(unsigned long lr_addr, unsigned long *saved_lr, struct lrstack *base);
+void __nomcount __mcount_trace(unsigned long lr_addr, unsigned long *saved_lr, struct lrstack *base)
+{
+	struct lrstack *slot = get_top(base);
 	char *start, *end;
 
 	if (!trace_on)
 		return;
 
-	if (get_symbol(addr, &start, &end)) {
-		mambo_write(start, (unsigned long) (end - start)); mambo_write("\n", 1);
-	} else
+	mprint("lr sym: ");
+	if (get_symbol(lr_addr, &start, &end))
+		mambo_write(start, (unsigned long) (end - start));
+	else
 		mambo_write(UNK_STR, sizeof(UNK_STR) - 1);
+
+	mprint(" "); pr_hex(lr_addr); mprint(" - ret sym: ");
+
+	if (get_symbol(*saved_lr, &start, &end))
+		mambo_write(start, (unsigned long) (end - start));
+	else
+		mambo_write(UNK_STR, sizeof(UNK_STR) - 1);
+
+	mprint(" "); pr_hex(*saved_lr);
+
+	mprint("\n");
+
+	get_symbol(lr_addr, &start, &end);
+	slot->name = start;
+	slot->length = (int) (end - start);
+	slot->saved_lr = *saved_lr;
+
+	*saved_lr = ((unsigned long) __mexit); // skip the function descriptor bit
+
 }
+
+/*
+ * don't change the prototype of __mexit, there's some black magic occuring
+ */
+// unsigned long __nomcount __mexit(unsigned long ret, unsigned long lr, struct lrstack *stack);
+//unsigned long __nomcount __mexit(unsigned long ret, unsigned long lr, struct lrstack *stack)
+
+unsigned long __nomcount __mcount_exit(unsigned long ret, unsigned long *restore_lr, struct lrstack *base)
+{
+	struct lrstack *slot = pop_top(base);
+	*restore_lr = slot->saved_lr;
+
+	mprint("<- "); mambo_write(slot->name, slot->length); mprint("\n");
+
+	return ret;
+}
+
