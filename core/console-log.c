@@ -26,6 +26,7 @@
 #include "stdio.h"
 #include "console.h"
 #include "timebase.h"
+#include "ctype.h"
 
 static int vprlog(int log_level, const char *fmt, va_list ap)
 {
@@ -44,6 +45,7 @@ static int vprlog(int log_level, const char *fmt, va_list ap)
 	if (log_level > (debug_descriptor.console_log_levels >> 4))
 		return 0;
 
+	/* if this changes parse_loghdr() needs to be updated too */
 	count = snprintf(buffer, sizeof(buffer), "[%5lu.%09lu,%d] ",
 			 tb_to_secs(tb), tb_remaining_nsecs(tb), log_level);
 	count+= vsnprintf(buffer+count, sizeof(buffer)-count, fmt, ap);
@@ -55,6 +57,50 @@ static int vprlog(int log_level, const char *fmt, va_list ap)
 
 	return count;
 }
+
+/*
+ * This parses a log entry to find it's log-level. If the log entry does not
+ * have a valid log header it'll return -1.
+ */
+static const char pattern[] = "[ddddd.ddddddddd,l] ";
+int loghdr_size = sizeof(pattern) - 1;
+
+/*
+ * No prototype since this *should* be in console.c, but since it needs to be
+ * kept in sync with the output format of prlog() it's better off here.
+ */
+int __parse_loghdr(const char *buf);
+int __parse_loghdr(const char *buf)
+{
+	int log_level = -1;
+	int i;
+
+	for (i = 0; i < loghdr_size; i++) {
+		int c = buf[i];
+
+		/* terminated early */
+		if (!c)
+			return -i;
+
+		switch (pattern[i]) {
+		case 'd':
+			if (!isdigit(c) && !isspace(c))
+				return -2;
+			break;
+		case 'l':
+			if (isdigit(c))
+				log_level = c - '0';
+
+			break;
+		default:
+			if (c != pattern[i])
+				return -3;
+		}
+	}
+
+	return log_level;
+}
+
 
 /* we don't return anything as what on earth are we going to do
  * if we actually fail to print a log message? Print a log message about it?
