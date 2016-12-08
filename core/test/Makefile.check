@@ -13,13 +13,16 @@ CORE_TEST := \
 	core/test/run-mem_region_reservations \
 	core/test/run-mem_range_is_reserved \
 	core/test/run-nvram-format \
-	core/test/run-trace core/test/run-msg \
 	core/test/run-pel \
 	core/test/run-pool \
 	core/test/run-time-utils \
 	core/test/run-timebase \
 	core/test/run-timer \
-	core/test/run-buddy
+	core/test/run-buddy \
+	core/test/run-msg \
+	core/test/run-trace
+# NB: The trace test takes forever, add new tests ABOVE run-trace
+>>>>>>> 5d2bdf5ef085... core/test: run trace test last
 
 HOSTCFLAGS+=-I . -I include
 
