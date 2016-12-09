@@ -17,6 +17,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#define __weak __attribute__((weak))
+
 #include "../../ccan/list/list.c"
 
 void _prlog(int log_level __attribute__((unused)), const char* fmt, ...) __attribute__((format (printf, 2, 3)));
@@ -24,9 +26,11 @@ void _prlog(int log_level __attribute__((unused)), const char* fmt, ...) __attri
 #ifndef pr_fmt
 #define pr_fmt(fmt) fmt
 #endif
+
+#ifndef prlog
 #define prlog(l, f, ...) do { _prlog(l, pr_fmt(f), ##__VA_ARGS__); } while(0)
 
-void _prlog(int log_level __attribute__((unused)), const char* fmt, ...)
+void __attribute__((weak)) _prlog(int log_level __attribute__((unused)), const char* fmt, ...)
 {
         va_list ap;
 
@@ -34,6 +38,7 @@ void _prlog(int log_level __attribute__((unused)), const char* fmt, ...)
         vprintf(fmt, ap);
         va_end(ap);
 }
+#endif
 
 /* Add any stub functions required for linking here. */
 static void stub_function(void)
@@ -41,8 +46,19 @@ static void stub_function(void)
 	abort();
 }
 
+
+static int noop_function(void)
+{
+	return 0;
+}
+
+/* this stub shit is terrible */
+
 #define STUB(fnname) \
 	void fnname(void) __attribute__((weak, alias ("stub_function")))
+
+#define NOOP_STUB(fnname) \
+	void fnname(void) __attribute__((weak, alias ("noop_function")))
 
 STUB(fdt_begin_node);
 STUB(fdt_property);
@@ -61,3 +77,23 @@ STUB(dt_next);
 STUB(dt_has_node_property);
 STUB(dt_get_address);
 STUB(add_chip_dev_associativity);
+
+STUB(__dt_add_property_cells);
+STUB(dt_add_property_string);
+STUB(dt_del_property);
+STUB(dt_find_by_name);
+STUB(__dt_find_property);
+STUB(dt_new);
+STUB(dt_new_addr);
+STUB(opal_add_poller);
+STUB(__opal_register);
+
+NOOP_STUB(lock_recursive);
+NOOP_STUB(lock);
+NOOP_STUB(unlock);
+NOOP_STUB(opal_update_pending_evt);
+
+unsigned long __weak top_of_ram = 16ULL * 1024 * 1024 * 1024;
+
+struct dt_node *opal_node = NULL;
+struct dt_node *dt_chosen = NULL;

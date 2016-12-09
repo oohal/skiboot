@@ -28,7 +28,6 @@
 #include <opal-internal.h>
 
 #define __TEST__
-unsigned long top_of_ram;	/* Fake it here */
 int main(void)
 {
 	unsigned long addr = 0xd000000000000000;
