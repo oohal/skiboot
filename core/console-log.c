@@ -32,7 +32,6 @@ static int vprlog(int log_level, const char *fmt, va_list ap)
 {
 	int count;
 	char buffer[320];
-	bool flush_to_drivers = true;
 	unsigned long tb = mftb();
 
 	/* It's safe to return 0 when we "did" something here
@@ -50,10 +49,7 @@ static int vprlog(int log_level, const char *fmt, va_list ap)
 			 tb_to_secs(tb), tb_remaining_nsecs(tb), log_level);
 	count+= vsnprintf(buffer+count, sizeof(buffer)-count, fmt, ap);
 
-	if (log_level > (debug_descriptor.console_log_levels & 0x0f))
-		flush_to_drivers = false;
-
-	console_write(flush_to_drivers, buffer, count);
+	console_write(buffer, count);
 
 	return count;
 }

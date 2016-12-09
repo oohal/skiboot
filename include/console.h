@@ -86,7 +86,7 @@ extern void console_complete_flush(void);
 extern size_t mambo_console_write(const char *buf, size_t count);
 extern void enable_mambo_console(void);
 
-ssize_t console_write(bool flush_to_drivers, const void *buf, size_t count);
+ssize_t console_write(const void *buf, size_t count);
 
 extern void clear_console(void);
 extern void memcons_add_properties(void);

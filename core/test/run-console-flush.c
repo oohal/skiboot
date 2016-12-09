@@ -116,7 +116,7 @@ int main(void)
 	memcons.obuf_size = sizeof(console_buffer);
 
 	populate_console(PR_INSANE, PR_NOTICE);
-	__flush_console(true);
+	__flush_console();
 
 	/*
 	 * Refill the console buffer dropping everything above PR_NOTICE

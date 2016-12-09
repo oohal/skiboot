@@ -53,11 +53,8 @@ static inline unsigned long mftb(void)
 char console_buffer[4096];
 struct debug_descriptor debug_descriptor;
 
-bool flushed_to_drivers;
-
-ssize_t console_write(bool flush_to_drivers, const void *buf, size_t count)
+ssize_t console_write(const void *buf, size_t count)
 {
-	flushed_to_drivers = flush_to_drivers;
 	memcpy(console_buffer, buf, count);
 	return count;
 }

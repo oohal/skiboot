@@ -159,7 +159,7 @@ static int find_eol(int start)
  * if there is more to go, but that only happens when the
  * underlying driver failed so don't call it again.
  */
-static bool __flush_console(bool flush_to_drivers __unused)
+static bool __flush_console(void)
 {
 	int flush_lvl = debug_descriptor.console_log_levels & 0xf;
 	struct cpu_thread *cpu = this_cpu();
@@ -194,16 +194,6 @@ static bool __flush_console(bool flush_to_drivers __unused)
 		return false;
 
 	in_flush = true;
-
-	/*
-	 * NB: this must appear after the in_flush check since it modifies
-	 *     con_out.
-	 */
-	if (!flush_to_drivers) {
-		con_out = con_in;
-		in_flush = false;
-		return false;
-	}
 
 	do {
 		int start, req, len, log_lvl;
@@ -252,7 +242,7 @@ bool flush_console(void)
 	bool ret;
 
 	lock(&con_lock);
-	ret = __flush_console(true);
+	ret = __flush_console();
 	unlock(&con_lock);
 
 	return ret;
@@ -311,7 +301,7 @@ static void write_char(char c)
 	inmem_write(c);
 }
 
-ssize_t console_write(bool flush_to_drivers, const void *buf, size_t count)
+ssize_t console_write(const void *buf, size_t count)
 {
 	/* We use recursive locking here as we can get called
 	 * from fairly deep debug path
@@ -326,7 +316,7 @@ ssize_t console_write(bool flush_to_drivers, const void *buf, size_t count)
 		write_char(c);
 	}
 
-	__flush_console(flush_to_drivers);
+	__flush_console();
 
 	if (need_unlock)
 		unlock(&con_lock);
@@ -336,7 +326,7 @@ ssize_t console_write(bool flush_to_drivers, const void *buf, size_t count)
 
 ssize_t write(int fd __unused, const void *buf, size_t count)
 {
-	return console_write(true, buf, count);
+	return console_write(buf, count);
 }
 
 ssize_t read(int fd __unused, void *buf, size_t req_count)
