@@ -27,6 +27,15 @@
 #include <processor.h>
 #include <cpu.h>
 
+/*
+ * ring buffer pointers
+ *
+ * con_in = offset the next character will be written to
+ * con_out = offset of the next character to be flushed
+ *
+ * when con_in == con_out there is no data to be flushed
+ */
+
 static char *con_buf = (char *)INMEM_CON_START;
 static size_t con_in;
 static size_t con_out;
@@ -94,17 +103,67 @@ void clear_console(void)
 	memset(con_buf, 0, INMEM_CON_LEN);
 }
 
-/*
- * Flush the console buffer into the driver, returns true
- * if there is more to go.
- * Optionally can skip flushing to drivers, leaving messages
- * just in memory console.
- */
-static bool __flush_console(bool flush_to_drivers)
+static inline int conbuf_get(int offset)
 {
+	offset %= memcons.obuf_size;
+
+	if (offset == con_in)
+		return -1;
+
+	return con_buf[offset];
+}
+
+extern int loghdr_size;
+extern int __parse_loghdr(const char *buffer);
+static int parse_loghdr(int start)
+{
+	char buffer[32];
+	int i, c;
+
+	for (i = 0; i < loghdr_size; i++) {
+		c = conbuf_get(start + i);
+		if (c < 0 || c == '\n')
+			return -1;
+
+		buffer[i] = c;
+	}
+
+	/*
+	 * we use this little wrapper around the "real" parser
+	 * so we can keep the inmem console in here and limit
+	 * exposure to the ringbuffer to inside of console.c
+	 */
+	return __parse_loghdr(buffer);
+}
+
+static int find_eol(int start)
+{
+	int c, len = 0;
+
+	while (1) {
+		c = conbuf_get(start + len);
+		if (c < 0)
+			break;
+
+		/* the newline char need to be included in the flushed string */
+		len++;
+		if (c == '\n')
+			break;
+	}
+
+	return len;
+}
+
+/*
+ * Flush the console buffer into the driver. Returns true
+ * if there is more to go, but that only happens when the
+ * underlying driver failed so don't call it again.
+ */
+static bool __flush_console(bool flush_to_drivers __unused)
+{
+	int flush_lvl = debug_descriptor.console_log_levels & 0xf;
 	struct cpu_thread *cpu = this_cpu();
-	size_t req, len = 0;
-	static bool in_flush, more_flush;
+	static bool in_flush;
 
 	/* Is there anything to flush ? Bail out early if not */
 	if (con_in == con_out || !con_driver)
@@ -131,10 +190,9 @@ static bool __flush_console(bool flush_to_drivers)
 	 * concurrent attempts at flushing the same chunk of buffer
 	 * by other processors.
 	 */
-	if (in_flush) {
-		more_flush = true;
+	if (in_flush)
 		return false;
-	}
+
 	in_flush = true;
 
 	/*
@@ -148,25 +206,43 @@ static bool __flush_console(bool flush_to_drivers)
 	}
 
 	do {
-		more_flush = false;
+		int start, req, len, log_lvl;
 
-		if (con_out > con_in) {
-			req = INMEM_CON_OUT_LEN - con_out;
-			more_flush = true;
+		start = con_out;
+
+		/*
+		 * NB: Input that does not start with a valid log skiboot
+		 * log header is always flushed. This can happen due to
+		 * writes into the dummy OPAL console or because a line
+		 * was only partially flushed.
+		 */
+		log_lvl = parse_loghdr(start);
+		req = find_eol(start);
+
+		if (log_lvl <= flush_lvl) {
+			/*
+			 * It this messages crosses the ring buffer edge then
+			 * truncate and write the rest on the next iteration.
+			 */
+			int end = (start + req) % memcons.obuf_size;
+			if (end < start)
+				req = memcons.obuf_size - start;
+
+			unlock(&con_lock);
+			len = con_driver->write(con_buf + con_out, req);
+			lock(&con_lock);
 		} else
-			req = con_in - con_out;
+			len = req;
 
-		unlock(&con_lock);
-		len = con_driver->write(con_buf + con_out, req);
-		lock(&con_lock);
+		con_out += len;
+		con_out %= memcons.obuf_size;
 
-		con_out = (con_out + len) % INMEM_CON_OUT_LEN;
-
-		/* write error? */
 		if (len < req)
-			break;
-	} while(more_flush);
+			goto bail;
 
+	} while (con_out != con_in);
+
+bail:
 	in_flush = false;
 	return con_out != con_in;
 }
