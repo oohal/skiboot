@@ -51,6 +51,9 @@ extern uint64_t opal_pending_events;
 extern struct dt_node *opal_node;
 
 extern void opal_table_init(void);
+
+#define opal_set_pending_evt(evt) opal_update_pending_evt(evt, evt)
+#define opal_clr_pending_evt(evt) opal_update_pending_evt(evt, 0)
 extern void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values);
 __be64 opal_dynamic_event_alloc(void);
 void opal_dynamic_event_free(__be64 event);
