@@ -201,6 +201,8 @@
 
 #else /* __ASSEMBLY__ */
 
+#ifndef __TEST__
+
 #include <compiler.h>
 #include <stdint.h>
 
@@ -319,6 +321,23 @@ static inline void st_le32(uint32_t *addr, uint32_t val)
 {
 	asm volatile("stwbrx %0,0,%1" : : "r"(val), "r"(addr), "m"(*addr));
 }
+
+#else  /* __TEST__ */
+
+#define smt_low()
+#define smt_medium()
+#define smt_high()
+#define smt_medium_high()
+#define smt_medium_low()
+#define smt_extra_high()
+#define smt_very_low()
+
+#define eieio()
+#define sync()
+#define lwsync()
+#define isync()
+
+#endif /* __TEST__ */
 
 #endif /* __ASSEMBLY__ */
 
