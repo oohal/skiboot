@@ -564,12 +564,20 @@ void __noreturn load_and_boot_kernel(bool is_reboot)
 
 static void add_nvmem_node(u64 base, u64 length)
 {
-	struct dt_node *new;
+	struct dt_node *new, *bus;
 	u64 reg[4] = {base, length - NVM_RESERVE_SIZE, base + length - NVM_RESERVE_SIZE, NVM_RESERVE_SIZE};
 
 	assert(length > NVM_RESERVE_SIZE);
 
-	new = dt_new_addr(dt_root, "nvmem", base);
+	/* Add a container bus, will automatically instantiate NVDIMMs for us */
+	bus = dt_find_by_name(dt_root, "nonvolatile-memory");
+	if (!bus) {
+		bus = dt_new(dt_root, "nonvolatile-memory");
+		dt_add_property_string(bus, "compatible", "simple-bus");
+		dt_add_property(bus, "ranges", NULL, 0);
+	}
+
+	new = dt_new_addr(bus, "nvmem", base);
 
 	dt_add_property_string(new, "compatible", "ibm,contutto-nvmem");
 	dt_add_property_string(new, "type", "fake");
