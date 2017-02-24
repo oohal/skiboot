@@ -32,10 +32,6 @@
 
 #include <ccan/container_of/container_of.h>
 
-#ifndef __SKIBOOT__
-#error "This libflash backend must be compiled with skiboot"
-#endif
-
 #define MBOX_DEFAULT_TIMEOUT 30
 
 struct lpc_window {
@@ -167,7 +163,7 @@ static int lpc_window_read(struct mbox_flash_data *mbox_flash, uint32_t pos,
 		uint32_t chunk;
 		uint32_t dat;
 
-		/* Choose access size */
+		/* XXX: make this read until it's aligned */
 		if (len > 3 && !(off & 3)) {
 			rc = lpc_read(OPAL_LPC_FW, off, &dat, 4);
 			if (!rc)
@@ -323,7 +319,7 @@ static int mbox_flash_write(struct blocklevel_device *bl, uint64_t pos,
 
 	mbox_flash = container_of(bl, struct mbox_flash_data, bl);
 
-	prlog(PR_TRACE, "Flash write at 0x%08llx for 0x%08llx\n", pos, len);
+	prlog(PR_TRACE, "Flash write at 0x%08x for 0x%08x\n", (u32) pos, (u32) len);
 	while (len > 0) {
 		/* Move window and get a new size to read */
 		rc = mbox_window_move(mbox_flash, &mbox_flash->write,
@@ -341,6 +337,10 @@ static int mbox_flash_write(struct blocklevel_device *bl, uint64_t pos,
 		 * Must flush here as changing the window contents
 		 * without flushing entitles the BMC to throw away the
 		 * data
+		 *
+		 * XXX: This doesn't match benh's description of the spec.
+		 *      According to him unflushed data can be written at
+		 *      any time.
 		 */
 		rc = mbox_flash_flush(mbox_flash, pos, size);
 		if (rc)
@@ -367,7 +367,7 @@ static int mbox_flash_read(struct blocklevel_device *bl, uint64_t pos,
 
 	mbox_flash = container_of(bl, struct mbox_flash_data, bl);
 
-	prlog(PR_TRACE, "Flash read at 0x%08llx for 0x%08llx\n", pos, len);
+	prlog(PR_TRACE, "Flash read at 0x%08x for 0x%08x\n", (u32) pos, (u32) len);
 	while (len > 0) {
 		/* Move window and get a new size to read */
 		rc = mbox_window_move(mbox_flash, &mbox_flash->read,
