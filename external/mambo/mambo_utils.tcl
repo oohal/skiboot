@@ -313,6 +313,37 @@ proc doff { opt } {
     simdebug set $opt 0
 }
 
+# FIXME: maybe have this ignore the funtion descriptors
+proc linsym { name type } {
+    global linux_symbol_map
+
+    # create a regexp that matches the symbol name
+    set base {([[:xdigit:]]*) (.)}
+    set exp [concat $base " $name"]
+    set ret ""
+
+    foreach {line addr type} [regexp -line -inline $exp $linux_symbol_map] {
+        set ret "0x$addr"
+    }
+
+    return $ret
+}
+
+proc skisym { name type } {
+    global skiboot_symbol_map
+
+    # create a regexp that matches the symbol name
+    set base {([[:xdigit:]]*) (.)}
+    set exp [concat $base " $name"]
+    set ret ""
+
+    foreach {line addr type} [regexp -line -inline $exp $skiboot_symbol_map] {
+        set ret "0x$addr"
+    }
+
+    return $ret
+}
+
 proc start_qtrace { { qtfile qtrace.qt } } {
     global env
 
