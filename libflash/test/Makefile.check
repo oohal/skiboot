@@ -4,7 +4,7 @@ LIBFLASH_TEST := libflash/test/test-flash libflash/test/test-ecc libflash/test/t
 LCOV_EXCLUDE += $(LIBFLASH_TEST:%=%.c)
 
 .PHONY : libflash-check libc-coverage
-libflash-check: $(LIBFLASH_TEST:%=%-check) $(CORE_TEST:%=%-gcov-run)
+libflash-check: $(LIBFLASH_TEST:%=%-check)
 libflash-coverage: $(LIBFLASH_TEST:%=%-gcov-run)
 
 check: libflash-check libc-coverage
