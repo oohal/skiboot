@@ -138,11 +138,16 @@ extern char __attrconst tohex(uint8_t nibble);
 /* Bit position of the most significant 1-bit (LSB=0, MSB=63) */
 static inline int ilog2(unsigned long val)
 {
+#ifdef __SKIBOOT__
+	/* FIXME: don't we have this in processor.h? */
 	int left_zeros;
 
 	asm volatile ("cntlzd %0,%1" : "=r" (left_zeros) : "r" (val));
 
 	return 63 - left_zeros;
+#else
+	return 63 - __builtin_clz(val);
+#endif
 }
 
 static inline bool is_pow2(unsigned long val)
