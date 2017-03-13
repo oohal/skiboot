@@ -264,9 +264,19 @@ static void mambo_sreset_init(void)
 
 static void mambo_platform_init(void)
 {
+	struct dt_property *p;
+
 	mambo_sreset_init();
 	mambo_rtc_init();
 	bogus_disk_flash_init();
+
+	/*
+	 * The simulator provided DT might already contain a
+	 * linux,stdout-path which needs to die.
+	 */
+	p = __dt_find_property(dt_chosen, "linux,stdout-path");
+	if (p)
+		dt_del_property(dt_chosen, p);
 }
 
 static int64_t mambo_cec_power_down(uint64_t request __unused)
