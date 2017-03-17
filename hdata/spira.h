@@ -1047,6 +1047,10 @@ struct sppcrd_chip_tod {
 #define SPPCRD_IDATA_MODULE_VPD	4
 
 
+#define SPPCRD_IDATA_HOST_I2C	5
+
+
+
 /*
  * Host Services Data.
  */
