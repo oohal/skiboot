@@ -70,7 +70,7 @@ struct cpu_thread {
 };
 
 struct cpu_thread __boot_cpu, *boot_cpu = &__boot_cpu;
-static unsigned long fake_pvr_type = PVR_TYPE_P7;
+static unsigned long fake_pvr_type = PVR_TYPE_P9;
 
 // Fake PVR_VERS_MAJ to 1
 #define PVR_VERS_MAJ(v) (1)
@@ -117,7 +117,7 @@ static bool spira_check_ptr(const void *ptr, const char *file, unsigned int line
 
 char __rodata_start[1], __rodata_end[1];
 
-enum proc_gen proc_gen = proc_gen_p7;
+enum proc_gen proc_gen = proc_gen_p9;
 
 static bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 {
@@ -305,9 +305,14 @@ int main(int argc, char *argv[])
 	spira_heap_size = lseek(fd, 0, SEEK_END);
 	if (spira_heap_size < 0)
 		err(1, "lseek on %s", argv[2]);
-	spira_heap = mmap(NULL, spira_heap_size, PROT_READ, MAP_SHARED, fd, 0);
+
+	spira_heap = malloc(spira_heap_size);
+	lseek(fd, 0, SEEK_SET);
+	read(fd, spira_heap, spira_heap_size);
+/*	spira_heap = mmap(NULL, spira_heap_size, PROT_READ, MAP_SHARED, fd, 0);
 	if (spira_heap == MAP_FAILED)
 		err(1, "mmaping %s", argv[3]);
+*/
 	if (verbose)
 		printf("verbose: mapped %zu at %p\n",
 		       spira_heap_size, spira_heap);
