@@ -77,7 +77,7 @@ static struct dt_node *get_bus_node(struct dt_node *i2cm, int port, int freq)
 		dt_add_property_cells(bus, "reg", port);
 
 		/* The p9 I2C master is identical to the p8 one */
-		dt_add_property_strings(bus, "compatible", "opal-i2c",
+		dt_add_property_strings(bus, "compatible", "ibm,opal-i2c",
 			"ibm,power8-i2c-port", "ibm,power9-i2c-port");
 
 		dt_add_property_cells(bus, "#size-cells", 0);
@@ -95,11 +95,65 @@ static struct dt_node *get_bus_node(struct dt_node *i2cm, int port, int freq)
 	return bus;
 }
 
+struct hdat_i2c_type {
+	uint32_t id;
+	const char *name;
+	const char *compat;
+};
+
+struct hdat_i2c_type hdat_i2c_devs[] = {
+	{ 0x2, "eeprom", "atmel,24c128" } /* XXX: Taken from a firestone, make sure this is what's actually on a p9 */
+};
+
+struct hdat_i2c_label {
+	uint32_t id;
+	const char *label;
+};
+
+struct hdat_i2c_label hdat_i2c_labels[] = {
+	{ 0x1, "9551-led-controller" },
+	{ 0x2, "seeprom" },
+	{ 0x5, "module-vpd" },
+	{ 0x6, "dimm SPD" },
+	{ 0x7, "proc-vpd" },
+	{ 0x8, "sbe-eeprom" },
+	{ 0x9, "planar-vpd" }
+};
+
+/*
+ * this is pretty half-assed, to generate the labels properly we need to look
+ * up associated SLCA index and determine what kind of module the device is on
+ * and why
+ */
+static struct hdat_i2c_type *map_type(uint32_t type)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(hdat_i2c_devs); i++)
+		if (hdat_i2c_devs[i].id == type)
+			return &hdat_i2c_devs[i];
+
+	return NULL;
+}
+
+static const char *map_label(uint32_t type)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(hdat_i2c_labels); i++)
+		if (hdat_i2c_labels[i].id == type)
+			return hdat_i2c_labels[i].label;
+
+	return NULL;
+}
+
 int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 	struct dt_node *xscom)
 {
 	struct dt_node *i2cm, *bus, *node;
+	const struct hdat_i2c_type *type;
 	const struct i2c_dev *dev;
+	const char *label;
 	int i, count;
 
 	/*
@@ -119,11 +173,34 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 		prlog(PR_ERR, "iterating i2c devs: %d/%d "
 		"eng = %d, bus = %d\n", i, count, dev->i2cm_engine, dev->i2cm_port);
 
-		node = dt_new_addr(bus, "device", dev->i2c_addr);
-		dt_add_property_cells(node, "reg", dev->i2c_addr);
+		type = map_type(dev->type);
+		label = map_label(be32_to_cpu(dev->purpose));
+
+		if (type) {
+			node = dt_new_addr(bus, type->name, dev->i2c_addr);
+			dt_add_property_string(node, "compatible", type->compat);
+		} else {
+			node = dt_new_addr(bus, "unknown", dev->i2c_addr);
+		}
+
+		/*
+		 * Looks like hostboot gives the address as an 8 bit, left
+		 * justified quantity (i.e it includes the R/W bit). So we need
+		 * to strip it off to get an address linux can use.
+		 */
+		dt_add_property_cells(node, "reg", dev->i2c_addr >> 1);
 
 		/* Make sure the OS doesn't touch it... */
-		dt_add_property_string(node, "status", "reserved");
+//		dt_add_property_string(node, "status", "reserved");
+		if (label)
+			dt_add_property_string(node, "label", label);
+
+		dt_add_property_cells(node, "link-id", be32_to_cpu(dev->i2c_link));
+
+		/*
+		 * XXX: What should I do with the SLCA index? given we need
+		 * to crossref it with the PCIe slots...
+		 */
 	}
 
 	return 0;
