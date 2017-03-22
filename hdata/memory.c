@@ -468,6 +468,9 @@ static void get_hb_reserved_mem(struct HDIF_common_hdr *ms_vpd)
 			continue;
 		}
 
+		/* HACK: align us up to a page boundary (64k) */
+		end_addr = (end_addr + 65536) & ~65535;
+
 		mem_reserve_hw(label, start_addr, end_addr - start_addr);
 	}
 }
