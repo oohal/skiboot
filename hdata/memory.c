@@ -468,6 +468,9 @@ static void get_hb_reserved_mem(struct HDIF_common_hdr *ms_vpd)
 			continue;
 		}
 
+		if ((start_addr & 65535) || (end_addr & 65535))
+			prerror("MEM: '%s' does not start and end on a 64K boundary!", label);
+
 		mem_reserve_hw(label, start_addr, end_addr - start_addr);
 	}
 }
