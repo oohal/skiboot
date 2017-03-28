@@ -436,6 +436,21 @@ static void get_hb_reserved_mem(struct HDIF_common_hdr *ms_vpd)
 		start_addr = be64_to_cpu(hb_resv_mem->start_addr);
 		end_addr = be64_to_cpu(hb_resv_mem->end_addr);
 
+		/* Zero length regions are a normal, but should be ignored */
+		if (start_addr - end_addr == 0) {
+			prlog(PR_DEBUG, "MEM: Ignoring zero length range\n");
+			continue;
+		}
+
+		/*
+		 * Workaround broken HDAT reserve regions which are
+		 * bigger than 512MB
+		 */
+		if ((end_addr - start_addr) > 0x20000000) {
+			prlog(PR_ERR, "MEM: Ignoring Bad HDAT reserve: too big\n");
+			continue;
+		}
+
 		/* remove the HRMOR bypass bit */
 		start_addr &= ~HRMOR_BIT;
 		end_addr &= ~HRMOR_BIT;
@@ -454,22 +469,8 @@ static void get_hb_reserved_mem(struct HDIF_common_hdr *ms_vpd)
 		prlog(PR_DEBUG, "MEM: Reserve '%s' %#" PRIx64 "-%#" PRIx64 " (type/inst=0x%08x)\n",
 		      label, start_addr, end_addr, be32_to_cpu(hb_resv_mem->type_instance));
 
-		if (start_addr == 0) {
-			prlog(PR_DEBUG, "MEM:   .. skipping\n");
-			continue;
-		}
-
-		/*
-		 * Workaround broken HDAT reserve regions which are
-		 * bigger than 512MB
-		 */
-		if ((end_addr - start_addr) > 0x20000000) {
-			prlog(PR_ERR, "MEM: Ignoring Bad HDAT reserve: too big\n");
-			continue;
-		}
-
 		if ((start_addr & 65535) || (end_addr & 65535))
-			prerror("MEM: '%s' does not start and end on a 64K boundary!", label);
+			prerror("MEM: '%s' does not start and end on a 64K boundary!\n", label);
 
 		mem_reserve_hw(label, start_addr, end_addr - start_addr);
 	}
