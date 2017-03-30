@@ -107,5 +107,6 @@ STUB(op_display);
 STUB(fsp_preload_lid);
 STUB(fsp_wait_lid_loaded);
 STUB(fsp_adjust_lid_side);
+STUB(backtrace);
 NOOP_STUB(mem_reserve_hw);
 NOOP_STUB(early_uart_init);
