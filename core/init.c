@@ -68,9 +68,9 @@ struct debug_descriptor debug_descriptor = {
 	.memcons_phys	= (uint64_t)&memcons,
 	.trace_mask	= 0, /* All traces disabled by default */
 #ifdef DEBUG
-	.console_log_levels = (PR_DEBUG << 4) | PR_DEBUG,
+	.console_log_levels = (PR_TRACE << 4) | PR_TRACE,
 #else
-	.console_log_levels = (PR_DEBUG << 4) | PR_NOTICE,
+	.console_log_levels = (PR_TRACE << 4) | PR_TRACE,
 #endif
 };
 
