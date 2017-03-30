@@ -714,10 +714,15 @@ static bool add_region(struct mem_region *region)
 		    !maybe_split(r, region->start + region->len))
 			return false;
 
-	/* Now we have only whole overlaps, if any. */
+	/*
+	 * After splitting the intersecting regions any overlapping regions
+	 * will be fully contained by the new region, so we can just delete
+	 * them.
+	 */
 	while ((r = get_overlap(region)) != NULL) {
-		assert(r->start == region->start);
-		assert(r->len == region->len);
+		if (strcmp(region->name, r->name))
+			prerror("Part of '%s' consumed by '%s'!\n",
+				r->name, region->name);
 		list_del_from(&regions, &r->list);
 		free(r);
 	}

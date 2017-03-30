@@ -222,18 +222,31 @@ int main(void)
 	r = new_region("base", (unsigned long)test_heap,
 		       TEST_HEAP_SIZE, NULL, REGION_SKIBOOT_HEAP);
 	assert(add_region(r));
+
+	/* fully contained split */
 	r = new_region("splitter", (unsigned long)test_heap + TEST_HEAP_SIZE/4,
 		       TEST_HEAP_SIZE/2, NULL, REGION_RESERVED);
 	assert(add_region(r));
+
+	/* overlapping split */
+	r = new_region("overlap", (unsigned long)test_heap + TEST_HEAP_SIZE/8,
+		       TEST_HEAP_SIZE/2, NULL, REGION_RESERVED);
+	assert(add_region(r));
+
 	/* Now we should have *three* regions. */
 	i = 0;
 	list_for_each(&regions, r, list) {
 		if (region_start(r) == test_heap) {
-			assert(r->len == TEST_HEAP_SIZE/4);
+			assert(r->len == TEST_HEAP_SIZE/8);
 			assert(strcmp(r->name, "base") == 0);
 			assert(r->type == REGION_SKIBOOT_HEAP);
-		} else if (region_start(r) == test_heap + TEST_HEAP_SIZE / 4) {
+		} else if (region_start(r) == test_heap + TEST_HEAP_SIZE/8) {
 			assert(r->len == TEST_HEAP_SIZE/2);
+			assert(strcmp(r->name, "overlap") == 0);
+			assert(r->type == REGION_RESERVED);
+			assert(!r->free_list.n.next);
+		} else if (region_start(r) == test_heap + TEST_HEAP_SIZE/8*5) {
+			assert(r->len == TEST_HEAP_SIZE/8);
 			assert(strcmp(r->name, "splitter") == 0);
 			assert(r->type == REGION_RESERVED);
 			assert(!r->free_list.n.next);
@@ -247,7 +260,7 @@ int main(void)
 		i++;
 	}
 	mem_dump_free();
-	assert(i == 3);
+	assert(i == 4);
 	while ((r = list_pop(&regions, struct mem_region, list)) != NULL) {
 		lock(&skiboot_heap.free_list_lock);
 		mem_free(&skiboot_heap, r, __location__);
