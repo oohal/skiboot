@@ -408,7 +408,7 @@ static void get_msareas(struct dt_node *root,
 static void get_hb_reserved_mem(struct HDIF_common_hdr *ms_vpd)
 {
 	const struct msvpd_hb_reserved_mem *hb_resv_mem;
-	u64 start_addr, end_addr, label_size;
+	u64 start_addr, end_addr, label_size, size;
 	int unnamed = 0, count, i;
 	char *label;
 
@@ -476,7 +476,29 @@ static void get_hb_reserved_mem(struct HDIF_common_hdr *ms_vpd)
 		prlog(PR_DEBUG, "MEM: Reserve '%s' %#" PRIx64 "-%#" PRIx64 " (type/inst=0x%08x)\n",
 		      label, start_addr, end_addr, be32_to_cpu(hb_resv_mem->type_instance));
 
-		mem_reserve_hw(label, start_addr, end_addr - start_addr + 1);
+
+		/*
+		 * HACK: align the size to the nearest 64k boundary
+		 *
+		 * NB: This should never go upstream. The opal-prd daemon
+		 *     allows these reserved ranges to be mapped by userspace
+		 *     so if the HB reserves aren't aligned we might just get
+		 *     junk.
+		 */
+		size = end_addr - start_addr + 1;
+
+		if (start_addr & 0xffff) {
+			prerror("MEM: Base of range '%s' is not 64K aligned! This is broken!\n",
+				label);
+		}
+
+		if (size & 0xffff) {
+			prerror("MEM: Size of range '%s' is not a multiple of 64K! rounding up...\n",
+					label);
+			size = (size + 0x10000) & ~0xffff;
+		}
+
+		mem_reserve_hw(label, start_addr, size);
 	}
 }
 
