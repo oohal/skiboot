@@ -620,18 +620,32 @@ static void steal_memory(u64 max_size)
 #define min(x, y) ((x) <= (y) ? (x) : (y))
 
 	if (chosen_reg) {
-		printf("NVDIMM: chose memory node '%s'\n", mem_node->name);
+		u64 taken;
+		printf("NVDIMM: chose memory node '%s' range: %#llx-%#llx\n",
+			mem_node->name, chosen_reg[0], chosen_reg[0] + chosen_reg[1]);
 
 		/* Either borrow 1/4 of the memory node or max_size bytes */
 		length = min(chosen_reg[1] / 4, max_size);
 		base = chosen_reg[0] + chosen_reg[1] - length;
 
+		taken = length;
+
+		while (!mem_range_is_free(base, length)) {
+			if (base < chosen_reg[0]) {
+				prerror("unable to carve out conttuo region!");
+				return;
+			}
+			base -= length;
+			taken += length;
+		}
+
 		/*
 		 * We REALLY shouldn't be modifying the devicetree, but we're
 		 * doing gross hacks anyway so who cares.
 		 */
-		printf("NVDIMM: stealing top %llu MB\n", length / 1024 / 1024);
-		chosen_reg[1] -= length;
+		printf("NVDIMM: took %llu MB (%llu for pmem)\n",
+			      taken / 1024 / 1024, length / 1024 / 1024);
+		chosen_reg[1] -= taken;
 
 		add_nvmem_node(base, length);
 	}
