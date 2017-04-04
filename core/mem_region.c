@@ -955,7 +955,6 @@ void mem_region_init(void)
 {
 	struct mem_region *region;
 	struct dt_node *i;
-	bool rc;
 
 	/* Ensure we have no collision between skiboot core and our heap */
 	extern char _end[];
@@ -1013,6 +1012,15 @@ void mem_region_init(void)
 		abort();
 	}
 
+	unlock(&mem_region_lock);
+}
+
+bool mem_region_add_reserves(void)
+{
+	bool rc;
+
+	lock(&mem_region_lock);
+
 	/* Add reserved ranges from the DT */
 	rc = mem_region_parse_reserved_nodes("/reserved-memory");
 	if (!rc)
@@ -1023,6 +1031,7 @@ void mem_region_init(void)
 
 	unlock(&mem_region_lock);
 
+	return rc;
 }
 
 static uint64_t allocated_length(const struct mem_region *r)

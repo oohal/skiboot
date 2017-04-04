@@ -984,6 +984,8 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 	xscom_init();
 	mfsi_init();
 
+	mem_region_add_reserves();
+
 	/*
 	 * Put various bits & pieces in device-tree that might not
 	 * already be there such as the /chosen node if not there yet,
