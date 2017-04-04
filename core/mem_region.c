@@ -817,6 +817,16 @@ struct mem_region *find_mem_region(const char *name)
 	return NULL;
 }
 
+bool mem_range_is_free(uint64_t start, uint64_t size)
+{
+	struct mem_region r = {
+		.start = start,
+		.len = size,
+	};
+
+	return !get_overlap(&r);
+}
+
 bool mem_range_is_reserved(uint64_t start, uint64_t size)
 {
 	uint64_t end = start + size;
