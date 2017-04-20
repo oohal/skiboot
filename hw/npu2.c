@@ -1667,8 +1667,8 @@ static int64_t opal_npu_init_context(uint64_t phb_id, int pasid, uint64_t msr,
 	 * MSR bits should be masked by the caller to allow for future
 	 * expansion if required.
 	 */
-	if (msr & ~NPU2_VALID_ATS_MSR_BITS)
-		return OPAL_UNSUPPORTED;
+	//if (msr & ~NPU2_VALID_ATS_MSR_BITS)
+	//	return OPAL_UNSUPPORTED;
 
 	/*
 	 * Need to get LPARSHORT.
