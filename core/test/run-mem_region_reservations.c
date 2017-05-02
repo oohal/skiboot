@@ -205,7 +205,7 @@ int main(void)
 
 	/* add pre-init reservations */
 	for (i = 0; i < ARRAY_SIZE(test_regions); i++)
-		mem_reserve_hw(test_regions[i].name,
+		mem_reserve_fw(test_regions[i].name,
 				test_regions[i].addr, 0x1000);
 
 	/* Now convert. */

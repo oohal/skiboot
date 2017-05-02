@@ -99,7 +99,6 @@ STUB(op_display);
 STUB(fsp_preload_lid);
 STUB(fsp_wait_lid_loaded);
 STUB(fsp_adjust_lid_side);
-STUB(backtrace);
 
 /* Add HW specific stubs here */
 static void noop_function(void) {}
