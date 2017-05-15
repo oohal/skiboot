@@ -288,7 +288,8 @@ static void bmc_create_node(const struct HDIF_common_hdr *sp)
 	const struct spss_sp_impl *sp_impl;
 	struct dt_node *lpcm, *lpc, *n;
 	u64 lpcm_base, lpcm_end;
-	int chip_id, size;
+	uint32_t gcid;
+	int size;
 
 	bmc_node = dt_new(dt_root, "bmc");
 	assert(bmc_node);
@@ -318,9 +319,13 @@ static void bmc_create_node(const struct HDIF_common_hdr *sp)
 		return;
 
 #define GB (1024ul * 1024ul * 1024ul)
-	chip_id = be32_to_cpu(iopath->lpc.chip_id);
+	/*
+	 * convert the hdat chip ID the HW chip id so we get the right
+	 * phys map offset
+	 */
+	gcid = pcid_to_chip_id(be32_to_cpu(iopath->lpc.chip_id));
 
-	phys_map_get(get_chip(chip_id), LPC_BUS, 0, &lpcm_base, NULL);
+	__phys_map_get(gcid, LPC_BUS, 0, &lpcm_base, NULL);
 	lpcm = dt_new_addr(dt_root, "lpcm-opb", lpcm_base);
 	assert(lpcm);
 
@@ -330,7 +335,7 @@ static void bmc_create_node(const struct HDIF_common_hdr *sp)
 		"ibm,power9-lpcm-opb", "simple-bus");
 	dt_add_property_u64s(lpcm, "reg", lpcm_base, 0x100000000ul);
 
-	dt_add_property_cells(lpcm, "ibm,chip-id", chip_id);
+	dt_add_property_cells(lpcm, "ibm,chip-id", gcid);
 
 	/* Setup the ranges for the MMIO LPC */
 	lpcm_end = lpcm_base + 2 * GB;
@@ -347,7 +352,7 @@ static void bmc_create_node(const struct HDIF_common_hdr *sp)
 	io_bar = be32_to_cpu(iopath->lpc.io_bar);
 	internal_bar = be32_to_cpu(iopath->lpc.internal_bar);
 
-	prlog(PR_DEBUG, "LPC: IOPATH chip id = %x\n", chip_id);
+	prlog(PR_DEBUG, "LPC: IOPATH chip id = %x\n", gcid);
 	prlog(PR_DEBUG, "LPC: FW BAR       = %#x\n", fw_bar);
 	prlog(PR_DEBUG, "LPC: MEM BAR      = %#x\n", mem_bar);
 	prlog(PR_DEBUG, "LPC: IO BAR       = %#x\n", io_bar);
