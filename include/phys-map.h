@@ -53,8 +53,17 @@ enum phys_map_type {
 	RESV
 };
 
-extern void phys_map_get(struct proc_chip *chip, enum phys_map_type type,
+/*
+ * Use this to query the phys map before we've done per-cpu init.
+ */
+extern void __phys_map_get(uint64_t gcid, enum phys_map_type type,
 			 int index, uint64_t *addr, uint64_t *size);
+
+static inline void phys_map_get(struct proc_chip *chip, enum phys_map_type type,
+			 int index, uint64_t *addr, uint64_t *size)
+{
+	__phys_map_get(chip->id, type, index, addr, size);
+}
 
 extern void phys_map_init(void);
 
