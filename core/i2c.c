@@ -20,6 +20,8 @@
 #include <device.h>
 #include <opal-msg.h>
 
+#undef DEBUG
+
 static LIST_HEAD(i2c_bus_list);
 
 /* Used to assign OPAL IDs */
@@ -47,6 +49,10 @@ struct i2c_bus *i2c_find_bus_by_id(uint32_t opal_id)
 static void opal_i2c_request_complete(int rc, struct i2c_request *req)
 {
 	uint64_t token = (uint64_t)(unsigned long)req->user_data;
+
+#ifdef DEBUG
+	prlog(PR_DEBUG, "OPAL-I2C: Done, tok = %llu, rc = %d\n", token, rc);
+#endif
 
 	opal_queue_msg(OPAL_MSG_ASYNC_COMP, NULL, NULL, token, rc);
 	i2c_free_req(req);
@@ -122,6 +128,12 @@ static int opal_i2c_request(uint64_t async_token, uint32_t bus_id,
 		i2c_free_req(req);
 		return rc;
 	}
+
+#ifdef DEBUG
+	/* This can get pretty loud */
+	prlog(PR_DEBUG, "OPAL-I2C: Queuing - type: %d, addr %x, offset %x (%d), tok: %llu\n",
+	     req->op, req->dev_addr, req->offset, req->offset_bytes, async_token);
+#endif
 
 	/* Finally, queue the OPAL i2c request and return */
 	rc = i2c_queue_req(req);

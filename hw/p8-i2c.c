@@ -235,28 +235,45 @@ struct p8_i2c_request {
 
 static int occ_i2c_unlock(struct p8_i2c_master *master);
 
+static const char *state_str(enum request_state state)
+{
+	switch(state) {
+	case state_idle:	return "idle";		break;
+	case state_occache_dis:	return "occ_cache_dis";	break;
+	case state_offset:	return "offset";	break;
+	case state_data:	return "data";		break;
+	case state_error:	return "error";		break;
+	case state_recovery:	return "recovery";	break;
+	}
+
+	return "***BAD***";
+}
+
 static void p8_i2c_print_debug_info(struct p8_i2c_master_port *port,
 				    struct i2c_request *req, uint64_t end_time)
 {
 	struct p8_i2c_master *master = port->master;
 	uint64_t cmd, mode, stat, estat, intm, intc;
+	char prefix[32];
 	int rc;
+
+	snprintf(prefix, sizeof(prefix), "I2C: c%u e%up%u:", master->chip_id,
+		master->engine_id, port->port_num);
 
 	/* Print master and request structure bits */
 	log_simple_error(&e_info(OPAL_RC_I2C_TRANSFER),
-			 "I2C: Chip %08x Eng. %d Port %d--\n"
-			 " xscom_base=0x%016llx\tstate=%d\tbytes_sent=%d\n",
-			 master->chip_id, master->engine_id, port->port_num,
-			 master->xscom_base, master->state, master->bytes_sent);
+		 "%s xscom_base=0x%016llx\tstate=%d\tbytes_sent=%d\n",
+		 prefix, master->xscom_base, master->state, master->bytes_sent);
 
-	log_simple_error(&e_info(OPAL_RC_I2C_TRANSFER), "I2C: Request info--\n"
-			 " addr=0x%04x\toffset_bytes=%d\toffset=%d\tlen=%d\n",
-			 req->dev_addr, req->offset_bytes, req->offset,
-			 req->rw_len);
+	log_simple_error(&e_info(OPAL_RC_I2C_TRANSFER),
+		"%s Request: addr=0x%04x offset_bytes=%d offset=%d len=%d\n",
+		 prefix, req->dev_addr, req->offset_bytes, req->offset,
+		 req->rw_len);
 
-	log_simple_error(&e_info(OPAL_RC_I2C_TRANSFER), "I2C: "
-			 " start_time=%016llx end_time=%016llx (duration=%016llx)\n",
-			 master->start_time, end_time, end_time - master->start_time);
+	log_simple_error(&e_info(OPAL_RC_I2C_TRANSFER),
+		"%s: start_time=%016llx end_time=%016llx (duration=%016llx)\n",
+		 prefix, master->start_time, end_time,
+		 end_time - master->start_time);
 
 	/* Dump the current state of i2c registers */
 	rc = xscom_read(master->chip_id, master->xscom_base + I2C_CMD_REG,
@@ -301,10 +318,10 @@ static void p8_i2c_print_debug_info(struct p8_i2c_master_port *port,
 		intc = 0ull;
 	}
 
-	log_simple_error(&e_info(OPAL_RC_I2C_TRANSFER), "I2C: Register dump--\n"
-			 "    cmd:0x%016llx\tmode:0x%016llx\tstat:0x%016llx\n"
-			 "  estat:0x%016llx\tintm:0x%016llx\tintc:0x%016llx\n",
-			 cmd, mode, stat, estat, intm, intc);
+	log_simple_error(&e_info(OPAL_RC_I2C_TRANSFER), "%s "
+			 "cmd:0x%016llx\tmode:0x%016llx\tstat:0x%016llx "
+			 "estat:0x%016llx\tintm:0x%016llx\tintc:0x%016llx\n",
+			 prefix, cmd, mode, stat, estat, intm, intc);
 }
 
 static bool p8_i2c_has_irqs(struct p8_i2c_master *master)
@@ -860,8 +877,8 @@ static void p8_i2c_status_cmd_completion(struct p8_i2c_master *master,
 {
 	int rc;
 
-	DBG("Command completion, state=%d bytes_sent=%d\n",
-	    master->state, master->bytes_sent);
+	DBG("Command completion, state=%s bytes_sent=%d\n",
+	    state_str(master->state), master->bytes_sent);
 	DBG("  start_time=%016llx end_time=%016llx (duration=%016llx)\n",
 	    master->start_time, end_time, end_time - master->start_time);
 
@@ -913,7 +930,19 @@ static void  p8_i2c_check_status(struct p8_i2c_master *master, bool timeout)
 			I2C_STAT_CMD_COMP)))
 		return;
 
-	DBG("Non-0 status: %016llx\n", status);
+	DBG("I2C: status: %016llx - %s%s%s%s%s%s%s %s %s\n", status,
+		(status & I2C_STAT_INVALID_CMD) ? "invalid cmd " : "",
+		(status & I2C_STAT_LBUS_PARITY_ERR) ? "parity err " : "",
+
+		/* should never see these, if we do it's a driver bug */
+		(status & I2C_STAT_BKEND_OVERRUN_ERR) ? "fifo overrun " : "",
+		(status & I2C_STAT_BKEND_ACCESS_ERR) ? "fifo access err" : "",
+
+		(status & I2C_STAT_ARBT_LOST_ERR) ? "arb err" : "",
+		(status & I2C_STAT_NACK_RCVD_ERR) ? "NAKed " : "",
+		(status & I2C_STAT_STOP_ERR) ? "stop err " : "",
+		(status & I2C_STAT_DATA_REQ) ? "data reqested " : "",
+		(status & I2C_STAT_CMD_COMP) ? "cmd complete " : "");
 
 	/* Mask the interrupts for this engine */
 	rc = xscom_write(master->chip_id, master->xscom_base + I2C_INTR_REG,
@@ -1429,8 +1458,8 @@ static void p8_i2c_timeout(struct timer *t __unused, void *data, uint64_t now)
 	 */
 	req = list_top(&master->req_list, struct i2c_request, link);
 	if (req == NULL) {
-		DBG("I2C: Timeout with no"
-		    " pending request state=%d\n", master->state);
+		DBG("I2C: Timeout with no pending request state=%d\n",
+			master->state);
 		goto exit;
 	}
 	request = container_of(req, struct p8_i2c_request, req);
@@ -1516,10 +1545,24 @@ static void p8_i2c_poll(struct timer *t __unused, void *data, uint64_t now)
 		return;
 
 	lock(&master->lock);
+	DBG("I2C: poller working c%xe%d\n",
+		master->chip_id, master->engine_id);
+
+	if (master->state == state_idle) {
+		/* we may have raced with the interrupt handler */
+		unlock(&master->lock);
+		return;
+	}
+
 	p8_i2c_check_status(master, false);
+
 	if (master->state != state_idle)
 		schedule_timer_at(&master->poller, now + master->poll_interval);
 	p8_i2c_check_work(master);
+
+	DBG("I2C: poller done with c%xe%d\n",
+		master->chip_id, master->engine_id);
+
 	unlock(&master->lock);
 }
 
@@ -1527,6 +1570,8 @@ void p8_i2c_interrupt(uint32_t chip_id)
 {
 	struct proc_chip *chip = get_chip(chip_id);
 	struct p8_i2c_master *master = NULL;
+
+	DBG("I2C: interrupt\n");
 
 	assert(chip);
 	list_for_each(&chip->i2cms, master, link) {
@@ -1537,14 +1582,21 @@ void p8_i2c_interrupt(uint32_t chip_id)
 
 		lock(&master->lock);
 
+		DBG("I2C: interrupt working c%xe%d\n",
+			master->chip_id, master->engine_id);
+
 		/* Run the state machine */
 		p8_i2c_check_status(master, false);
 
 		/* Check for new work */
 		p8_i2c_check_work(master);
 
+		DBG("I2C: interrupt done with c%xe%d\n",
+			master->chip_id, master->engine_id);
+
 		unlock(&master->lock);
 	}
+	DBG("I2C: end interrupt\n");
 }
 
 static const char *compat[] = {
