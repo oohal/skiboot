@@ -470,7 +470,7 @@ static bool add_xscom_sppcrd(uint64_t xscom_base)
 
 		if (proc_gen >= proc_gen_p9) {
 			add_xive_node(np);
-			parse_i2c_devs(hdif, SPPCRD_IDATA_HOST_I2C, np);
+//			parse_i2c_devs(hdif, SPPCRD_IDATA_HOST_I2C, np);
 		}
 	}
 
