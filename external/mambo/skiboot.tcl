@@ -57,6 +57,8 @@ mconfig net MAMBO_NET none
 # Net: What is the base interface for the tun/tap device
 mconfig tap_base MAMBO_NET_TAP_BASE 0
 
+mconfig nvm_regions NVM_REGIONS 1
+mconfig nvm_size NVM_SIZE [expr 128 * 1024 * 1024]
 
 #
 # Create machine config
@@ -200,6 +202,22 @@ set fake_nvram_node [mysim of addchild $reserved_memory "ibm,fake-nvram" ""]
 set reg [list $fake_nvram_start $fake_nvram_size ]
 mysim of addprop $fake_nvram_node array64 "reg" reg
 mysim of addprop $fake_nvram_node empty "name" "ibm,fake-nvram"
+
+global end_of_ram
+set reg [mysim of getprop $mem0_node "reg"]
+set end_of_ram [lindex "$reg" 1]
+set nvm_bus [mysim of addchild $root_node "nonvolatile-memory" ""]
+mysim of addprop $nvm_bus empty "ranges" ""
+
+for { set r 0 } { $r < $mconf(nvm_regions) } { incr r } {
+	set end_of_ram [format "0x%x" [expr $end_of_ram - $mconf(nvm_size)]]
+	set n [mysim of addchild $nvm_bus "byte-region" "$end_of_ram"]
+	set reg [list $end_of_ram $mconf(nvm_size)]
+	mysim of addprop $n array64 "reg" reg
+}
+
+set reg [list 0x0 $end_of_ram]
+mysim of addprop $mem0_node array64 "reg" reg
 
 # Allow P9 to use all idle states
 if { $default_config == "P9" } {
