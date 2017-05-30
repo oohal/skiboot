@@ -1141,6 +1141,27 @@ struct sppcrd_chip_tod {
 /* Idata index 5 : Chip attached I2C devices */
 #define SPPCRD_IDATA_HOST_I2C	5
 
+/* Idata index 6 : OpenCAPI/NVlink info */
+#define SPPCRD_IDATA_SMP_LINK	6
+struct sppcrd_smp_link {
+	__be32 link_id;
+	__be32 usage;
+	__be32 brick_id;
+	__be32 lane_mask;
+
+	/* bonded pci slots (mostly a NVLink thing) */
+	__be16 pci_idx_interposer;
+	__be16 pci_idx_sideband;
+
+	__be16 slca_idx; /* SLCA index of the *external* port */
+	__be16 reserved;
+
+	/* nvlink/ocapi detection devices */
+	__be32 i2c_link_cable;
+	__be32 i2c_presence;
+	__be32 i2c_micro;
+} __packed;
+
 /*
  * Host Services Data.
  */
