@@ -1278,6 +1278,139 @@ static void add_stop_levels(void)
 		"ibm,enabled-stop-levels", stop_levels);
 }
 
+#define NPU_BASE 0x5011000
+#define NPU_SIZE 0x2c
+#define NPU_INDIRECT0	0x8000000009010c3f
+#define NPU_INDIRECT1	0x800000000c010c3f
+
+static void add_npu(struct dt_node *xscom, const struct HDIF_array_hdr *links,
+			int npu_index, int phb_index)
+{
+	const struct sppcrd_smp_link *link;
+	struct dt_node *npu;
+	int group_target[6]; /* Slot ID of the PCI slot target by this group */
+	int group_count = 0;
+	int link_count = 0;
+	int i;
+
+	memset(group_target, 0, sizeof(group_target));
+
+	npu = dt_new_addr(xscom, "npu", NPU_BASE);
+	dt_add_property_cells(npu, "reg", NPU_BASE, NPU_SIZE);
+	dt_add_property_cells(npu, "#size-cells", 0);
+	dt_add_property_cells(npu, "#address-cells", 1);
+
+	dt_add_property_strings(npu, "compatible", "ibm,power9-npu");
+	dt_add_property_cells(npu, "ibm,phb-index", phb_index);
+	dt_add_property_cells(npu, "ibm,npu-index", npu_index);
+
+	HDIF_iarray_for_each(links, i, link) {
+		uint16_t slot_id = be16_to_cpu(link->pci_slot_idx);
+		uint32_t link_id = be32_to_cpu(link->link_id);
+		struct dt_node *node;
+
+		/* only add a link node if this link is targeted at at device */
+		if (be32_to_cpu(link->usage) != SMP_LINK_USE_DEVICE)
+			continue;
+
+		node = dt_new_addr(npu, "link", link_id);
+		if (!node) {
+			prerror("NPU: Unable to add link %d to %s\n",
+					i, npu->name);
+			continue;
+		}
+
+		dt_add_property_string(node, "compatible", "ibm,npu-link");
+		dt_add_property_cells(node, "reg", link_id);
+		dt_add_property_cells(node, "ibm,npu-link-index", link_id);
+
+		dt_add_property_u64s(node, "ibm,npu-phy",
+				link_id < 3 ? NPU_INDIRECT0 : NPU_INDIRECT1);
+		dt_add_property_cells(node, "ibm,npu-lane-mask",
+				be32_to_cpu(link->lane_mask));
+		dt_add_property_cells(node, "ibm,npu-brick-id",
+				be32_to_cpu(link->brick_id));
+
+		link_count++;
+
+		/*
+		 * Add the group details if this is an NVlink.
+		 *
+		 * TODO: Cable card stuff.
+		 */
+		if (slot_id) {
+			struct dt_node *slot;
+			int group;
+
+			/*
+			 * Search the existing groups for one targeting
+			 * this PCI slot
+			 */
+			for (group = 0; group < group_count; group++)
+				if (group_target[group] == slot_id)
+					break;
+
+			/* no group, make a new one */
+			if (group == group_count) {
+				group_target[group] = slot_id;
+				group_count++;
+			}
+
+			dt_add_property_cells(node, "ibm,npu-group-id", group);
+
+			slot = find_slot_entry_node(dt_root, slot_id);
+			if (!slot) {
+				char *path = dt_get_path(node);
+				prerror("NPU: Unable to find target slot (eid %x) of %s\n",
+						slot_id, path);
+				free(path);
+				continue;
+			}
+
+			dt_add_property_string(node, "ibm,slot-label",
+					dt_prop_get(slot, "ibm,slot-label"));
+
+			dt_add_property_cells(node, "ibm,pcie-slot",
+					slot->phandle);
+		}
+	}
+
+	dt_add_property_cells(npu, "ibm,npu-links", link_count);
+	prlog(PR_DEBUG, "Added %d links for npu on %s",
+			link_count, xscom->name);
+}
+
+static void add_npus(void)
+{
+	struct dt_node *xscom;
+	int phb_index = 7; /* Start counting from 7, for no reason */
+	int npu_index = 0;
+
+	if (proc_gen < proc_gen_p9)
+		return;
+
+	dt_for_each_compatible(dt_root, xscom, "ibm,xscom") {
+		const struct HDIF_array_hdr *links;
+
+		links = xscom_to_pcrd(xscom, SPPCRD_IDATA_SMP_LINK);
+		if (!links) {
+			prerror("NPU: Unable to find matching SPPCRD for %s\n",
+				xscom->name);
+			continue;
+		}
+
+		/* should never happen, but stranger things have */
+		if (!dt_find_by_name(dt_root, "ibm,pcie-slots")) {
+			prerror("PCIe slot information missing, can't add npu");
+			continue;
+		}
+
+		/* some hostboots will give us an empty array */
+		if (be32_to_cpu(links->ecnt))
+			add_npu(xscom, links, npu_index, phb_index);
+	}
+}
+
 /*
  * Legacy SPIRA is being deprecated and we have new SPIRA-H/S structures.
  * But on older system (p7?) we will continue to get legacy SPIRA.
@@ -1377,6 +1510,10 @@ int parse_hdat(bool is_opal)
 
 	/* Add IO HUBs and/or PHBs */
 	io_parse();
+
+	/* Add NPU nodes */
+	if (proc_gen >= proc_gen_p9)
+		add_npus();
 
 	/* Parse VPD */
 	vpd_parse();
