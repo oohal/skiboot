@@ -538,7 +538,7 @@ static void parse_slot_details(struct dt_node *slot,
 		dt_add_property(slot, "nvlink", NULL, 0);
 }
 
-static struct dt_node *find_slot_entry_node(struct dt_node *root, u32 entry_id)
+struct dt_node *find_slot_entry_node(struct dt_node *root, u32 entry_id)
 {
 	struct dt_node *node;
 
