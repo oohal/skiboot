@@ -25,6 +25,7 @@
 #include <p7ioc.h>
 #include <vpd.h>
 #include <inttypes.h>
+#include <string.h>
 
 #include "hdata.h"
 
@@ -435,6 +436,364 @@ static void io_add_p8_cec_vpd(const struct HDIF_common_hdr *sp_iohubs)
 	io_get_lx_info(kwvpd, kwvpd_sz, 0, dt_root);
 }
 
+/*
+ * Assumptions:
+ *
+ * a) the IOSLOT index is the hub ID -CHECK
+ *
+ */
+
+extern struct dt_node *dt_slots;
+
+static void add_i2c_link(struct dt_node *node, const char *link_name,
+			u32 i2c_link)
+{
+	/* FIXME: Do something not shit */
+	dt_add_property_cells(node, link_name, i2c_link);
+}
+
+/*
+ * the root of the slots node has #address-cells = 2, <hub-index, phb-index>
+ * can we ditch hub-index?
+ */
+
+
+static const struct slot_map_details *find_slot_details(
+		const struct HDIF_common_hdr *ioslot, int entry)
+{
+	const struct slot_map_details *details = NULL;
+	const struct HDIF_array_hdr *arr;
+	unsigned int i;
+
+	arr = HDIF_get_iarray(ioslot, IOSLOT_IDATA_DETAILS, NULL);
+	HDIF_iarray_for_each(arr, i, details)
+		if (be16_to_cpu(details->entry) == entry)
+			break;
+
+	return details;
+}
+
+static void parse_slot_details(struct dt_node *slot,
+		const struct slot_map_details *details)
+{
+	u32 slot_caps;
+
+	/*
+	 * generic slot options
+	 */
+
+	dt_add_property_cells(slot, "max-power",
+		be16_to_cpu(details->max_power));
+
+	if (details->perst_ctl_type == SLOT_PERST_PHB_OR_SW)
+		dt_add_property(slot, "pci-perst", NULL, 0);
+	else if (details->perst_ctl_type == SLOT_PERST_SW_GPIO)
+		dt_add_property_cells(slot, "gpio-perst", details->perst_gpio);
+
+	if (details->presence_det_type == SLOT_PRESENCE_PCI)
+		dt_add_property(slot, "pci-presence-detect", NULL, 0);
+
+	/*
+	 * specific slot capabilities
+	 */
+	slot_caps = be32_to_cpu(details->slot_caps);
+
+	if (slot_caps & SLOT_CAP_LSI)
+		dt_add_property(slot, "lsi", NULL, 0);
+
+	if (slot_caps & SLOT_CAP_CAPI) {
+		/* XXX: should we be more specific here?
+		 *
+		 * Also we should double check that this slot
+		 * is a root connected slot.
+		 */
+		dt_add_property(slot, "capi", NULL, 0);
+	}
+
+	if (slot_caps & SLOT_CAP_CCARD) {
+		dt_add_property(slot, "cable-card", NULL, 0);
+
+		if (details->presence_det_type == SLOT_PRESENCE_I2C)
+			add_i2c_link(slot, "i2c-presence-detect",
+				be32_to_cpu(details->i2c_cable_card));
+	}
+
+	if (slot_caps & SLOT_CAP_HOTPLUG) {
+		dt_add_property(slot, "hotplug", NULL, 0);
+
+		/*
+		 * Power control should only exist when the slot is hotplug
+		 * capable
+		 */
+		if (details->power_ctrl_type == SLOT_PWR_I2C)
+			add_i2c_link(slot, "i2c-power-ctrl",
+				be32_to_cpu(details->i2c_power_ctl));
+	}
+
+	/*
+	 * NB: Additional NVLink specific info is added to this node
+	 *     when the SMP Link structures are parsed later on.
+	 */
+	if (slot_caps & SLOT_CAP_NVLINK)
+		dt_add_property(slot, "nvlink", NULL, 0);
+}
+
+static struct dt_node *find_slot_entry_node(struct dt_node *root, u32 entry_id)
+{
+	struct dt_node *node;
+
+	for (node = dt_first(root); node; node = dt_next(root, node)) {
+		if (!dt_has_node_property(node, DT_PRIVATE "entry_id", NULL))
+			continue;
+
+		if (dt_prop_get_u32(node, DT_PRIVATE "entry_id") == entry_id)
+			return node;
+	}
+
+	return NULL;
+}
+
+/*
+ * The internal HDAT representation of the various types of slot is kinda
+ * dumb, translate it into something more sensible
+ */
+enum slot_types {
+	st_root,
+	st_slot,
+	st_rc_slot,
+	st_sw_upstream,
+	st_sw_downstream,
+	st_builtin
+};
+
+static const char *st_name(enum slot_types type)
+{
+	switch(type) {
+	case st_root:		return "root-complex";
+	case st_slot:		return "pluggable";
+	case st_rc_slot:	return "pluggable"; /* differentiate? */
+	case st_sw_upstream:	return "switch-up";
+	case st_sw_downstream:	return "switch-down";
+	case st_builtin:	return "builtin";
+	}
+
+	return "(none)";
+}
+
+static enum slot_types xlate_type(uint8_t type, u32 features)
+{
+	bool is_slot = features & SLOT_FEAT_SLOT;
+
+	switch (type) {
+	case SLOT_TYPE_ROOT_COMPLEX:
+		return is_slot ? st_rc_slot : st_root;
+	case SLOT_TYPE_BUILTIN:
+		return st_builtin;
+	case SLOT_TYPE_SWITCH_UP:
+		return st_sw_upstream;
+	case SLOT_TYPE_SWITCH_DOWN:
+		return is_slot ? st_slot : st_sw_downstream;
+	}
+
+	return -1; /* shouldn't happen */
+}
+
+static bool is_port(struct dt_node *n)
+{
+	//return dt_node_is_compatible(n, "compatible", "ibm,pcie-port");
+	return dt_node_is_compatible(n, "ibm,pcie-port");
+}
+
+/* this only works inside parse_one_ioslot() */
+#define SM_LOG(level, fmt, ...) \
+	prlog(level, "SLOTMAP: %d:%d:%d " \
+		fmt, /* user input */ \
+		hub_id, entry->phb_index, eid, \
+		##__VA_ARGS__ /* user args */)
+
+#define SM_ERR(fmt, ...) SM_LOG(PR_ERR, fmt, ##__VA_ARGS__)
+#define SM_DBG(fmt, ...) SM_LOG(PR_DEBUG, fmt, ##__VA_ARGS__)
+
+static void parse_one_slot(const struct slot_map_entry *entry,
+		const struct slot_map_details *details, int hub_id)
+{
+	struct dt_node *node, *parent = NULL;
+	u16 eid, pid, vid, did;
+	u32 flags;
+	int type;
+
+	flags = be32_to_cpu(entry->features);
+	type = xlate_type(entry->type, flags);
+
+	eid = be16_to_cpu(entry->entry_id);
+	pid = be16_to_cpu(entry->parent_id);
+
+	prlog(PR_DEBUG, "%s - eid = %d, pid = %d\n", st_name(type), eid, pid);
+
+	/* empty slot, ignore it */
+	if (eid == 0x0 && pid == 0x0)
+		return;
+
+	if (type != st_root && type != st_rc_slot) {
+		if (eid <= pid) {
+			SM_ERR("Attempted to add slot before it's parent (%d)\n", pid);
+			return;
+		}
+
+		parent = find_slot_entry_node(dt_slots, pid);
+		if (!parent) {
+			SM_ERR("Unable to find node for parent slot (id = %d)\n",
+				pid);
+			return;
+		}
+	}
+
+	switch (type) {
+	case st_root:
+		if (pid)
+			SM_DBG("This root complex has a parent! Ignoring...\n");
+
+		node = dt_new_2addr(dt_slots, "root-complex",
+						hub_id, entry->phb_index);
+		dt_add_property_cells(node, "#address-cells", 2);
+		dt_add_property_cells(node, "#size-cells", 0);
+		dt_add_property_strings(node, "compatible",
+				"ibm,pcie-port", "ibm,pcie-root-port");
+		break;
+
+	case st_sw_downstream: /* slot connected to switch output */
+		node = dt_new_addr(parent, "down-port", entry->down_port);
+		dt_add_property_strings(node, "compatible",
+				"ibm,pcie-port");
+		break;
+
+	case st_rc_slot:
+		/* for RC slots we need to add a root complex node first */
+		node = dt_new_2addr(dt_slots, "root-complex",
+						hub_id, entry->phb_index);
+		dt_add_property_cells(node, "#address-cells", 2);
+		dt_add_property_cells(node, "#size-cells", 0);
+		dt_add_property_strings(node, "compatible",
+				"ibm,pcie-port", "ibm,pcie-root-port");
+		parent = node;
+
+	/* these devices must exist below a port */
+	case st_sw_upstream:
+	case st_builtin:
+	case st_slot:
+		if (!is_port(parent)) {
+			SM_ERR("%s connected to %s (%d), should be %s or %s!\n",
+				st_name(type), parent->name, pid,
+				st_name(st_root), st_name(st_sw_downstream));
+			return;
+		}
+
+		vid = (be32_to_cpu(entry->vendor_id) & 0xffff);
+		did = (be32_to_cpu(entry->device_id) & 0xffff);
+
+		prlog(PR_DEBUG, "Found %s slot with %x:%x\n",
+			st_name(type), vid, did);
+
+		/* The VID:DID is only meaningful for builtins and switches */
+		if (vid && did) {
+			node = dt_new_2addr(parent, st_name(type), vid, did);
+			dt_add_property_cells(node, "reg", vid, did);
+		} else {
+			/*
+			 * If we get no vdid then create a "wildcard" slot
+			 * that matches any device
+			 */
+			node = dt_new(parent, st_name(type));
+		}
+
+		if (type == st_sw_upstream) {
+			dt_add_property_cells(node, "#address-cells", 1);
+			dt_add_property_cells(node, "#size-cells", 0);
+			dt_add_property_cells(node, "upstream-port",
+					entry->up_port);
+		}
+		break;
+
+	default:
+		SM_ERR("Unknown slot map type %x\n", entry->type);
+		return;
+	}
+
+	/*
+	 * Now add any generic slot map properties.
+	 */
+
+	/* private since we don't want hdat stuff leaking */
+	dt_add_property_cells(node, DT_PRIVATE "entry_id", eid);
+
+	if (entry->mrw_slot_id)
+		dt_add_property_cells(node, "mrw-slot-id",
+				be16_to_cpu(entry->mrw_slot_id));
+
+	if (entry->lane_mask)
+		dt_add_property_cells(node, "lane-mask",
+				be16_to_cpu(entry->lane_mask));
+
+	/* what is the difference between this and the lane reverse? */
+	if (entry->lane_reverse)
+		dt_add_property_cells(node, "lanes-reversed",
+				be16_to_cpu(entry->lane_reverse));
+
+	if (strnlen(entry->name, sizeof(entry->name)))
+		dt_add_property_nstr(node, "slot-name",
+				entry->name, sizeof(entry->name));
+
+	if (details)
+		parse_slot_details(node, details);
+}
+
+/*
+ * Under the IOHUB structure we have and idata array describing
+ * the PHBs under each chip. The IOHUB structure also has a child
+ * array called IOSLOT which describes slot map. The i`th element
+ * of the IOSLOT array corresponds to the slot map of the i`th
+ * element of the iohubs idata array.
+ *
+ * Probably.
+ *
+ * Furthermore, arrayarrayarrayarrayarray.
+ */
+static void io_parse_slots(const void *sp_iohubs, int hub_id)
+{
+	const struct HDIF_child_ptr *ioslot_arr;
+	const struct HDIF_array_hdr *entry_arr;
+	const struct HDIF_common_hdr *ioslot;
+	const struct slot_map_entry *entry;
+	unsigned int i, count;
+
+	dt_slots = dt_new_check(dt_root, "slots");
+
+	ioslot_arr = HDIF_child_arr(sp_iohubs, CECHUB_CHILD_IOSLOTS);
+	if (!ioslot_arr)
+		return;
+
+	count = be32_to_cpu(ioslot_arr->count); /* should only be 1 */
+	if (!count)
+		return;
+
+	prlog(PR_DEBUG, "CEC: Found slot map for IOHUB %d\n", hub_id);
+	if (count > 1)
+		prerror("CEC: Multiple IOSLOTs found for IO HUB %d\n", hub_id);
+
+	ioslot = HDIF_child(sp_iohubs, ioslot_arr, 0, "IOSLOT");
+	if (!ioslot)
+		return;
+
+	entry_arr = HDIF_get_iarray(ioslot, IOSLOT_IDATA_SLOTMAP, NULL);
+	HDIF_iarray_for_each(entry_arr, i, entry) {
+		const struct slot_map_details *details;
+
+		details = find_slot_details(ioslot,
+				be16_to_cpu(entry->entry_id));
+		parse_one_slot(entry, details, hub_id);
+	}
+}
+
 static void io_parse_fru(const void *sp_iohubs)
 {
 	unsigned int i;
@@ -453,6 +812,9 @@ static void io_parse_fru(const void *sp_iohubs)
 	for (i = 0; i < count; i++) {
 		const struct cechub_io_hub *hub;
 		unsigned int size, hub_id;
+
+		if(i > 0)
+			break;
 
 		hub = HDIF_get_iarray_item(sp_iohubs, CECHUB_FRU_IO_HUBS,
 					   i, &size);
@@ -583,6 +945,7 @@ void io_parse(void)
 
 		/* Ok, we have a reasonable candidate */
 		io_parse_fru(sp_iohubs);
+		io_parse_slots(sp_iohubs, i);
 	}
 }
 
