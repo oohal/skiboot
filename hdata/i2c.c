@@ -197,7 +197,7 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 		return -1;
 	}
 
-	HDIF_iarray_for_each((void *)ahdr, i, dev) {
+	HDIF_iarray_for_each(&ahdr->hdr, i, dev) {
 		/*
 		 * XXX: Some broken hostboots populate i2c devs with zeros.
 		 * Workaround them for now.
@@ -218,7 +218,7 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 		 */
 		i2c_addr = dev->i2c_addr >> 1;
 
-		prlog(PR_TRACE, "HDAT I2C: found e%dp%d - %x\n",
+		prlog(PR_DEBUG, "HDAT I2C: found e%dp%d - %x\n",
 			dev->i2cm_engine, dev->i2cm_port, i2c_addr);
 
 		type = map_type(dev->type);
