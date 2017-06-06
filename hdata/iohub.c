@@ -287,8 +287,8 @@ static struct dt_node *io_add_phb4(const struct cechub_io_hub *hub,
 				   const struct HDIF_common_hdr *sp_iohubs,
 				   struct dt_node *xcom,
 				   unsigned int pec_index,
-				   int stacks,
-				   int phb_base)
+				   int phb_base,
+				   int stacks)
 {
 	struct dt_node *pbcq;
 	uint32_t reg[4];
@@ -384,9 +384,9 @@ static struct dt_node *io_add_p9(const struct cechub_io_hub *hub,
 		(u32) hub->fab_br0_pdt);
 
 	/* Create PBCQs */
-	io_add_phb4(hub, sp_iohubs, xscom, 0, 1, 0);
-	io_add_phb4(hub, sp_iohubs, xscom, 1, 2, 1);
-	io_add_phb4(hub, sp_iohubs, xscom, 2, 3, 3);
+	io_add_phb4(hub, sp_iohubs, xscom, 0, 0, 1); /* PBCQ 0, PHB  0     */
+	io_add_phb4(hub, sp_iohubs, xscom, 1, 1, 2); /* PBCQ 1, PHBs 1,2   */
+	io_add_phb4(hub, sp_iohubs, xscom, 2, 3, 3); /* PBCQ 2, PHBs 3,4,5 */
 
 	return xscom;
 }
