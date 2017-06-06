@@ -165,7 +165,7 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 	uint32_t i2c_addr;
 	uint32_t version;
 	uint32_t size;
-	int i, count;
+	int i;
 
 	/*
 	 * This code makes a few assumptions about XSCOM addrs, etc
@@ -177,9 +177,7 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 	 * Emit an error if we get a newer version. This is an interim measure
 	 * until the new version format is finalised.
 	 */
-	ahdr = HDIF_get_idata(hdr, idata_index, &size);
-	if (!ahdr || !size)
-		return -1;
+	ahdr = (void *) HDIF_get_iarray(hdr, idata_index, &size);
 
 	/*
 	 * Some hostboots don't correctly fill the version field. On these
@@ -199,10 +197,7 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 		return -1;
 	}
 
-	count = HDIF_get_iarray_size(hdr, idata_index);
-	for (i = 0; i < count; i++) {
-		dev = HDIF_get_iarray_item(hdr, idata_index, i, &size);
-
+	HDIF_iarray_for_each((void *)ahdr, i, dev) {
 		/*
 		 * XXX: Some broken hostboots populate i2c devs with zeros.
 		 * Workaround them for now.
