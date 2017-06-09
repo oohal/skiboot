@@ -58,19 +58,10 @@ static const struct slot_table_entry palmetto_plx_slots[] = {
 
 static const struct slot_table_entry palmetto_plx_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0,0),
 		.children = palmetto_plx_slots,
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry palmetto_phb0_1_slot[] = {
-	{
-		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0,0),
 		.name = "Backplane PLX",
-		.children = palmetto_plx_up,
 	},
 	{ .etype = st_end },
 };
@@ -93,7 +84,7 @@ static const struct slot_table_entry palmetto_phb_table[] = {
 	{
 		.etype = st_phb,
 		.location = ST_LOC_PHB(0,1),
-		.children = palmetto_phb0_1_slot,
+		.children = palmetto_plx_up,
 	},
 	{
 		.etype = st_phb,

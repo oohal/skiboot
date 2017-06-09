@@ -68,19 +68,10 @@ static const struct slot_table_entry habanero_plx_slots[] = {
 
 static const struct slot_table_entry habanero_plx_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0,0),
 		.children = habanero_plx_slots,
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry habanero_phb1_slot[] = {
-	{
-		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0,0),
 		.name = "Backplane PLX",
-		.children = habanero_plx_up,
 	},
 	{ .etype = st_end },
 };
@@ -103,7 +94,7 @@ static const struct slot_table_entry habanero_phb_table[] = {
 	{
 		.etype = st_phb,
 		.location = ST_LOC_PHB(0,1),
-		.children = habanero_phb1_slot,
+		.children = habanero_plx_up,
 	},
 	{
 		.etype = st_phb,

@@ -73,19 +73,10 @@ static const struct slot_table_entry p8dtu_plx_slots[] = {
 
 static const struct slot_table_entry p8dtu_plx_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0,0),
 		.children = p8dtu_plx_slots,
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry p8dtu_phb0_1_slot[] = {
-	{
-		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0,0),
 		.name = "PLX Switch",
-		.children = p8dtu_plx_up,
 	},
 	{ .etype = st_end },
 };
@@ -144,7 +135,7 @@ static const struct slot_table_entry p8dtu2u_phb_table[] = {
 	{
 		.etype = st_phb,
 		.location = ST_LOC_PHB(0,1),
-		.children = p8dtu_phb0_1_slot,
+		.children = p8dtu_plx_up,
 	},
 	{
 		.etype = st_phb,
@@ -178,7 +169,7 @@ static const struct slot_table_entry p8dtu1u_phb_table[] = {
 	{
 		.etype = st_phb,
 		.location = ST_LOC_PHB(0,1),
-		.children = p8dtu_phb0_1_slot,
+		.children = p8dtu_plx_up,
 	},
 	{
 		.etype = st_phb,

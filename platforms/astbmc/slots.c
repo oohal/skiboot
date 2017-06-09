@@ -259,6 +259,8 @@ static int check_slot_table(struct phb *phb,
 				r++;
 			}
 			break;
+
+		case st_sw_upstream:
 		case st_pluggable_slot:
 		case st_builtin_dev:
 			if (!phb)

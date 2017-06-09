@@ -34,6 +34,7 @@ struct slot_table_entry {
 		st_phb,
 		st_pluggable_slot,
 		st_builtin_dev,
+		st_sw_upstream,
 		st_npu_slot
 	} etype;
 	uint32_t location;
