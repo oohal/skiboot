@@ -32,6 +32,94 @@
 
 #define PHB4_SHARED_SLOT_IDX_WITHERSPOON     3
 
+static const struct slot_table_entry witherspoon_plx0_down[] = {
+	{
+		.etype = st_pluggable_slot,
+		.location = ST_LOC_DEVFN(0x80,0),
+		.name = "GPU0",
+		.nvlink = ST_LOC_NPU_GROUP(0, 0),
+	},
+	{
+		.etype = st_pluggable_slot,
+		.location = ST_LOC_DEVFN(0xa0,0),
+		.name = "GPU1",
+		.nvlink = ST_LOC_NPU_GROUP(0, 1),
+	},
+	{
+		.etype = st_pluggable_slot,
+		.location = ST_LOC_DEVFN(0xc0,0),
+		.name = "GPU2",
+		.nvlink = ST_LOC_NPU_GROUP(0, 2),
+	},
+	{ .etype = st_end },
+};
+
+static const struct slot_table_entry witherspoon_plx1_down[] = {
+	{
+		.etype = st_pluggable_slot,
+		.location = ST_LOC_DEVFN(0x60,0),
+		.name = "GPU3",
+		.nvlink = ST_LOC_NPU_GROUP(8, 0),
+	},
+	{
+		.etype = st_pluggable_slot,
+		.location = ST_LOC_DEVFN(0x80,0),
+		.nvlink = ST_LOC_NPU_GROUP(8, 1),
+		.name = "GPU4",
+	},
+	{
+		.etype = st_pluggable_slot,
+		.location = ST_LOC_DEVFN(0xa0,0),
+		.name = "GPU5",
+		.nvlink = ST_LOC_NPU_GROUP(8, 2),
+	},
+	{ .etype = st_end },
+};
+
+static const struct slot_table_entry witherspoon_phb0_4_slot[] = {
+	{
+		.etype = st_sw_upstream,
+		.location = ST_LOC_DEVFN(0x20,0),
+		.children = witherspoon_plx0_down,
+		.name = "PLX 0",
+#if 0
+		.vid = 0x10b5,
+		.did = 0x8725,
+		.upstream_port = 0,
+#endif
+	},
+	{ .etype = st_end },
+};
+
+static const struct slot_table_entry witherspoon_phb8_5_slot[] = {
+	{
+		.etype = st_sw_upstream,
+		.location = ST_LOC_DEVFN(20,0),
+		.children = witherspoon_plx1_down,
+		.name = "PLX 1",
+#if 0
+		.vid = 0x10b5,
+		.did = 0x8725,
+		.upstream_port = 1,
+#endif
+	},
+	{ .etype = st_end },
+};
+
+static const struct slot_table_entry witherspoon_phb_table[] = {
+	{
+		.etype = st_phb,
+		.location = ST_LOC_PHB(0,4),
+		.children = witherspoon_phb0_4_slot,
+	},
+	{
+		.etype = st_phb,
+		.location = ST_LOC_PHB(8,5),
+		.children = witherspoon_phb8_5_slot,
+	},
+	{ .etype = st_end },
+};
+
 static bool witherspoon_probe(void)
 {
 	if (!dt_node_is_compatible(dt_root, "ibm,witherspoon"))
@@ -42,6 +130,8 @@ static bool witherspoon_probe(void)
 
 	/* Setup UART for use by OPAL (Linux hvc) */
 	uart_set_console_policy(UART_CONSOLE_OPAL);
+
+	slot_table_init(witherspoon_phb_table);
 
 	return true;
 }
