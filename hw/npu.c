@@ -33,6 +33,8 @@
 #include <npu.h>
 #include <xscom.h>
 #include <string.h>
+#include <npu-common.h>
+
 
 /*
  * Terminology:
@@ -336,134 +338,52 @@ NPU_CFG_WRITE(8,  u8);
 NPU_CFG_WRITE(16, u16);
 NPU_CFG_WRITE(32, u32);
 
-static int __npu_dev_bind_pci_dev(struct phb *phb __unused,
-				  struct pci_device *pd,
-				  void *data)
-{
-	struct npu_dev *dev = data;
-	struct dt_node *pci_dt_node;
-	char *pcislot;
-
-	/* Ignore non-nvidia PCI devices */
-	if ((pd->vdid & 0xffff) != 0x10de)
-		return 0;
-
-	/* Find the PCI device's slot location */
-	for (pci_dt_node = pd->dn;
-	     pci_dt_node && !dt_find_property(pci_dt_node, "ibm,slot-label");
-	     pci_dt_node = pci_dt_node->parent);
-
-	if (!pci_dt_node)
-		return 0;
-
-	pcislot = (char *)dt_prop_get(pci_dt_node, "ibm,slot-label");
-
-	prlog(PR_DEBUG, "NPU: comparing GPU %s and NPU %s\n",
-	      pcislot, dev->slot_label);
-
-	if (streq(pcislot, dev->slot_label))
-		return 1;
-
-	return 0;
-}
-
-static void npu_dev_bind_pci_dev(struct npu_dev *dev)
-{
-	struct phb *phb;
-	uint32_t i;
-
-	if (dev->pd)
-		return;
-
-	for (i = 0; i < 64; i++) {
-		if (dev->npu->phb.opal_id == i)
-			continue;
-
-		phb = pci_get_phb(i);
-		if (!phb)
-			continue;
-
-		dev->pd = pci_walk_dev(phb, NULL, __npu_dev_bind_pci_dev, dev);
-		if (dev->pd) {
-			dev->phb = phb;
-			/* Found the device, set the bit in config space */
-			PCI_VIRT_CFG_INIT_RO(dev->pvd, VENDOR_CAP_START +
-				VENDOR_CAP_PCI_DEV_OFFSET, 1, 0x01);
-			return;
-		}
-	}
-
-	prlog(PR_INFO, "%s: No PCI device for NPU device %04x:00:%02x.0 to bind to. If you expect a GPU to be there, this is a problem.\n",
-	      __func__, dev->npu->phb.opal_id, dev->index);
-}
-
-static struct lock pci_npu_phandle_lock = LOCK_UNLOCKED;
-
-/* Appends an NPU phandle to the given PCI device node ibm,npu
- * property */
-static void npu_append_pci_phandle(struct dt_node *dn, u32 phandle)
-{
-	uint32_t *npu_phandles;
-	struct dt_property *pci_npu_phandle_prop;
-	size_t prop_len;
-
-	/* Use a lock to make sure no one else has a reference to an
-	 * ibm,npu property (this assumes this is the only function
-	 * that holds a reference to it). */
-	lock(&pci_npu_phandle_lock);
-
-	/* This function shouldn't be called unless ibm,npu exists */
-	pci_npu_phandle_prop = (struct dt_property *)
-		dt_require_property(dn, "ibm,npu", -1);
-
-	/* Need to append to the properties */
-	prop_len = pci_npu_phandle_prop->len;
-	prop_len += sizeof(*npu_phandles);
-	dt_resize_property(&pci_npu_phandle_prop, prop_len);
-	pci_npu_phandle_prop->len = prop_len;
-
-	npu_phandles = (uint32_t *) pci_npu_phandle_prop->prop;
-	npu_phandles[prop_len/sizeof(*npu_phandles) - 1] = phandle;
-	unlock(&pci_npu_phandle_lock);
-}
-
-static int npu_dn_fixup(struct phb *phb,
-			struct pci_device *pd,
-			void *data __unused)
-{
-	struct npu *p = phb_to_npu(phb);
-	struct npu_dev *dev;
-
-	dev = bdfn_to_npu_dev(p, pd->bdfn);
-	assert(dev);
-
-	if (dev->phb || dev->pd)
-		return 0;
-
-	/* NPU devices require a slot location to associate with GPUs */
-	dev->slot_label = dt_prop_get(pd->dn, "ibm,slot-label");
-
-	/* Bind the emulated PCI device with the real one, which can't
-	 * be done until the PCI devices are populated. Once the real
-	 * PCI device is identified, we also need fix the device-tree
-	 * for it
-	 */
-	npu_dev_bind_pci_dev(dev);
-	if (dev->phb && dev->pd && dev->pd->dn) {
-		if (dt_find_property(dev->pd->dn, "ibm,npu"))
-			npu_append_pci_phandle(dev->pd->dn, pd->dn->phandle);
-		else
-			dt_add_property_cells(dev->pd->dn, "ibm,npu", pd->dn->phandle);
-
-		dt_add_property_cells(pd->dn, "ibm,gpu", dev->pd->dn->phandle);
-	}
-
-	return 0;
-}
-
+/*
+ * Locate the real PCI device targeted by this NVlink by matching devices
+ * against slots.
+ */
 static void npu_phb_final_fixup(struct phb *phb)
 {
-	pci_walk_dev(phb, NULL, npu_dn_fixup, NULL);
+	struct npu *npu = phb_to_npu(phb);
+	struct pci_device *npu_pd, *pd;
+
+	/*
+	 * For each "pci_virt_device" on the PHB we want to find the probed
+	 * PCI device that matches it.
+	 *
+	 * XXX: Can we have virtual and real devices on a PHB at the same time?
+	 * the virtual config space design seems to preclude it and there could
+	 * be bus numbering conflicts.
+	 *
+	 * actual PCI device and add the node cross references.
+	 */
+
+	for_each_pci_dev(phb, npu_pd) {
+		struct npu_dev *dev = bdfn_to_npu_dev(npu, npu_pd->bdfn);
+		uint32_t phandle;
+
+		/* copy the link target from the link@x to the emulated pci dev */
+		phandle = dt_prop_get_u32(dev->dt_node, "ibm,pcie-slot");
+		dt_add_property_cells(npu_pd->dn, "ibm,pcie-slot", phandle);
+
+		pd = npu_find_gpu_dev(npu_pd);
+		if (!pd) {
+			prerror("%s: No PCI device for NPU device %04x:00:%02x.0 to bind to. If you expect a GPU to be there, this is a problem.\n",
+				__func__, dev->npu->phb.opal_id, dev->index);
+			continue;
+		}
+
+		/* Now bind this nvlink to this GPU */
+		dev->phb = pd->phb;
+		dev->pd = pd;
+
+		npu_append_pci_phandle(pd->dn, npu_pd->dn->phandle);
+		dt_add_property_cells(npu_pd->dn, "ibm,gpu", pd->dn->phandle);
+
+		/* Mark the link as in use in cfg space */
+		PCI_VIRT_CFG_INIT_RO(dev->pvd, VENDOR_CAP_START +
+				VENDOR_CAP_PCI_DEV_OFFSET, 1, 0x01);
+	}
 }
 
 static void npu_ioda_init(struct npu *p)
