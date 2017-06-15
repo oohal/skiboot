@@ -40,9 +40,58 @@ static bool is_npu_phb(const struct slot_table_entry *phb)
 
 static void slot_trace(struct dt_node *n)
 {
+	const char *label = NULL;
 	char *c = dt_get_path(n);
-	prlog(PR_NOTICE, "SLOTS: Added %s\n", c);
+
+	if (dt_has_node_property(n, "label", NULL))
+		label = dt_prop_get(n, "label");
+
+	prlog(PR_NOTICE, "Added slot %s%s%s\n", c,
+		label ? " - " : "", label ? label : "");
 	free(c);
+}
+
+static void parse_nvlink(uint32_t nvlink, struct dt_node *slot)
+{
+	uint32_t group_id = (nvlink & 0xffff) >> 3;
+	uint32_t chip_id = nvlink >> 16;
+	struct dt_node *npu, *link;
+	bool added = false;
+
+	/* find the relevant NPU */
+	dt_for_each_compatible(dt_root, npu, "ibm,power8-npu")
+		if (dt_prop_get_u32(npu->parent, "ibm,chip-id") == chip_id)
+			break;
+
+	if (!npu) {
+		char *path = dt_get_path(slot);
+		prerror("Unable to find NPU node for nvlink group %x:%x on %s\n",
+			chip_id, group_id, path);
+		free(path);
+		return;
+	}
+
+	/*
+	 * Add this property to the relevant links. Note that there
+	 * are multiple links to a group so we need to check every link
+	 */
+	dt_for_each_compatible(npu, link, "ibm,npu-link") {
+		uint32_t gid = dt_prop_get_u32_def(link,
+					"ibm,npu-group-id", ~0);
+
+		if (gid == group_id) {
+			dt_add_property_cells(link, "ibm,pcie-slot",
+				slot->phandle);
+			added = true;
+		}
+	}
+
+	if (!added) {
+		char *path = dt_get_path(slot);
+		prerror("Unable to find NPU links for nvlink %x:%x on %s\n",
+			chip_id, group_id, path);
+		free(path);
+	}
 }
 
 static bool parse_one_slot(struct dt_node *parent_node,
@@ -105,9 +154,6 @@ static bool parse_one_slot(struct dt_node *parent_node,
 				"ibm,pcie-root-port");
 		break;
 
-	case st_npu_slot: /* ignore npu slots since they're not really slots */
-		return false;
-
 	case st_builtin_dev:
 	case st_pluggable_slot:
 		node = dt_new(parent_node, entry->etype == st_builtin_dev ?
@@ -116,12 +162,17 @@ static bool parse_one_slot(struct dt_node *parent_node,
 
 		if (entry->name)
 			dt_add_property_string(node, "label", entry->name);
+
+		if (entry->nvlink)
+			parse_nvlink(entry->nvlink, node);
+
 		break;
 
 	case st_sw_upstream:
 		parse_switch(parent_node, entry);
 		return true;
 
+	case st_npu_slot:
 	case st_end:
 		assert(0);
 		return false;
