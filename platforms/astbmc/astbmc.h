@@ -26,7 +26,7 @@
  * are allocated as functions within a device, so groups must be numbered
  * sequentially starting at 0.
  */
-#define ST_LOC_NPU_GROUP(group_id)	(group_id << 3)
+#define ST_LOC_NPU_GROUP(chip_id, group_id) ((chip_id << 16 | group_id << 3) | 1)
 
 struct slot_table_entry {
 	enum slot_table_etype {
@@ -40,6 +40,7 @@ struct slot_table_entry {
 	uint32_t location;
 	const char *name;
 	const struct slot_table_entry *children;
+	uint32_t nvlink; /* set by ST_LOC_NPU_GROUP */
 };
 
 extern const struct bmc_platform astbmc_ami;
