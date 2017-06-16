@@ -204,7 +204,8 @@
 #define OPAL_NPU_INIT_CONTEXT			146
 #define OPAL_NPU_DESTROY_CONTEXT		147
 #define OPAL_NPU_MAP_LPAR			148
-#define OPAL_LAST				148
+#define OPAL_SCRAPE_LOG				149
+#define OPAL_LAST				149
 
 /* Device tree flags */
 
@@ -384,6 +385,7 @@ enum OpalPendingState {
 	OPAL_EVENT_PCI_ERROR	   = 0x200,
 	OPAL_EVENT_DUMP_AVAIL	   = 0x400,
 	OPAL_EVENT_MSG_PENDING	   = 0x800,
+	OPAL_EVENT_LOG_PENDING	   = 0x1000,
 };
 
 enum OpalThreadStatus {

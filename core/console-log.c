@@ -27,6 +27,8 @@
 #include "console.h"
 #include "timebase.h"
 #include "ctype.h"
+#include "opal-api.h"
+#include "opal-internal.h"
 
 static int vprlog(int log_level, const char *fmt, va_list ap)
 {
@@ -50,6 +52,9 @@ static int vprlog(int log_level, const char *fmt, va_list ap)
 	count+= vsnprintf(buffer+count, sizeof(buffer)-count, fmt, ap);
 
 	console_write(buffer, count);
+
+	if (log_level <= PR_ERR)
+		opal_set_pending_evt(OPAL_EVENT_LOG_PENDING);
 
 	return count;
 }

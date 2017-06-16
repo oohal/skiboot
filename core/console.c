@@ -154,6 +154,12 @@ static int find_eol(int start)
 	return len;
 }
 
+/* this is a bit ugly, but eh... */
+#define foreach_logline(offset, start, len, log_lvl) \
+for (start = offset; \
+	log_lvl = parse_loghdr(start), len = find_eol(start), start != con_in; \
+	start = (start + len) % memcons.obuf_size)
+
 /*
  * Flush the console buffer into the driver. Returns true
  * if there is more to go, but that only happens when the
@@ -236,6 +242,55 @@ bail:
 	in_flush = false;
 	return con_out != con_in;
 }
+
+static int64_t opal_scrape_log(int64_t *offset, char *buffer,
+			       int64_t len, int64_t *lvl)
+{
+	int start, req, log_lvl, i = 0;
+	int64_t rc = OPAL_EMPTY;
+
+	if (*offset > memcons.obuf_size)
+		return OPAL_PARAMETER;
+
+	/* if we aren't provided a real offset then scan from the offset */
+	if (*offset < 0)
+		*offset = 0;// = last_err;
+
+	lock(&con_lock);
+
+	foreach_logline(*offset, start, req, log_lvl) {
+		if (log_lvl > PR_ERR)
+			continue;
+
+		if (log_lvl < 0)
+			continue;
+
+		*lvl = log_lvl;
+
+		/* strip the log header bits and the \r\n */
+		req -= loghdr_size + 2;
+		start += loghdr_size;
+
+		rc = OPAL_SUCCESS;
+		for (i = 0; i < req && i < len - 1; i++)
+			buffer[i] = conbuf_get(start + i);
+		buffer[i] = '\0';
+
+		/* buffer to small? */
+		if (i == len - 1)
+			rc = OPAL_PARTIAL;
+
+		break;
+	}
+
+	if (rc == OPAL_EMPTY)
+		opal_clr_pending_evt(OPAL_EVENT_LOG_PENDING);
+
+	*offset = start + i;
+	unlock(&con_lock);
+	return rc;
+}
+opal_call(OPAL_SCRAPE_LOG, opal_scrape_log, 4);
 
 bool flush_console(void)
 {
