@@ -79,6 +79,7 @@ static const struct slot_table_entry p8dnu_phb0_2_slot[] = {
 		.etype = st_pluggable_slot,
 		.location = ST_LOC_DEVFN(0,0),
 		.name = "GPU1",
+		.nvlink = ST_LOC_NPU_GROUP(0, 1),
 	},
 	{ .etype = st_end },
 };
@@ -88,6 +89,7 @@ static const struct slot_table_entry p8dnu_phb0_3_slot[] = {
 		.etype = st_pluggable_slot,
 		.location = ST_LOC_DEVFN(0,0),
 		.name = "GPU2",
+		.nvlink = ST_LOC_NPU_GROUP(0, 0),
 	},
 	{ .etype = st_end },
 };
@@ -149,6 +151,7 @@ static const struct slot_table_entry p8dnu_phb1_2_slot[] = {
 		.etype = st_pluggable_slot,
 		.location = ST_LOC_DEVFN(0,0),
 		.name = "GPU3",
+		.nvlink = ST_LOC_NPU_GROUP(1, 1),
 	},
 	{ .etype = st_end },
 };
@@ -158,6 +161,7 @@ static const struct slot_table_entry p8dnu_phb1_3_slot[] = {
 		.etype = st_pluggable_slot,
 		.location = ST_LOC_DEVFN(0,0),
 		.name = "GPU4",
+		.nvlink = ST_LOC_NPU_GROUP(1, 0),
 	},
 	{ .etype = st_end },
 };
