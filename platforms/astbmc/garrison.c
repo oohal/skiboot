@@ -63,20 +63,6 @@ static const struct slot_table_entry garrison_phb0_3_slot[] = {
 	{ .etype = st_end },
 };
 
-static const struct slot_table_entry garrison_npu0_slots[] = {
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(0),
-		.name = "GPU2",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(1),
-		.name = "GPU1",
-	},
-	{ .etype = st_end },
-};
-
 static const struct slot_table_entry garrison_phb1_0_slot[] = {
 	{
 		.etype = st_pluggable_slot,
@@ -144,20 +130,6 @@ static const struct slot_table_entry garrison_phb1_3_slot[] = {
 	{ .etype = st_end },
 };
 
-static const struct slot_table_entry garrison_npu1_slots[] = {
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(0),
-		.name = "GPU4",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(1),
-		.name = "GPU3",
-	},
-	{ .etype = st_end },
-};
-
 static const struct slot_table_entry garrison_phb_table[] = {
 	{
 		.etype = st_phb,
@@ -181,11 +153,6 @@ static const struct slot_table_entry garrison_phb_table[] = {
 	},
 	{
 		.etype = st_phb,
-		.location = ST_LOC_PHB(0,4),
-		.children = garrison_npu0_slots,
-	},
-	{
-		.etype = st_phb,
 		.location = ST_LOC_PHB(1,0),
 		.children = garrison_phb1_0_slot,
 	},
@@ -203,11 +170,6 @@ static const struct slot_table_entry garrison_phb_table[] = {
 		.etype = st_phb,
 		.location = ST_LOC_PHB(1,3),
 		.children = garrison_phb1_3_slot,
-	},
-	{
-		.etype = st_phb,
-		.location = ST_LOC_PHB(1,4),
-		.children = garrison_npu1_slots,
 	},
 	{ .etype = st_end },
 };

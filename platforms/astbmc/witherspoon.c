@@ -110,44 +110,6 @@ static const struct slot_table_entry witherspoon_phb8_5_slot[] = {
 	{ .etype = st_end },
 };
 
-static const struct slot_table_entry witherspoon_npu0_slots[] = {
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(0),
-		.name = "GPU0",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(1),
-		.name = "GPU1",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(2),
-		.name = "GPU2",
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry witherspoon_npu8_slots[] = {
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(0),
-		.name = "GPU3",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(1),
-		.name = "GPU4",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(2),
-		.name = "GPU5",
-	},
-	{ .etype = st_end },
-};
-
 static const struct slot_table_entry witherspoon_phb_table[] = {
 	{
 		.etype = st_phb,
@@ -156,18 +118,8 @@ static const struct slot_table_entry witherspoon_phb_table[] = {
 	},
 	{
 		.etype = st_phb,
-		.location = ST_LOC_PHB(0,7),
-		.children = witherspoon_npu0_slots,
-	},
-	{
-		.etype = st_phb,
 		.location = ST_LOC_PHB(8,5),
 		.children = witherspoon_phb8_5_slot,
-	},
-	{
-		.etype = st_phb,
-		.location = ST_LOC_PHB(8,8),
-		.children = witherspoon_npu8_slots,
 	},
 	{ .etype = st_end },
 };
