@@ -573,13 +573,15 @@ static void add_nvmem_node(u64 base, u64 length)
 	bus = dt_find_by_name(dt_root, "nonvolatile-memory");
 	if (!bus) {
 		bus = dt_new(dt_root, "nonvolatile-memory");
-		dt_add_property_string(bus, "compatible", "simple-bus");
+		dt_add_property_strings(bus, "compatible",
+				"nonvolatile-memory", "nonvolatile-memory-bus");
 		dt_add_property(bus, "ranges", NULL, 0);
 	}
 
 	new = dt_new_addr(bus, "nvmem", base);
 
-	dt_add_property_string(new, "compatible", "ibm,contutto-nvmem");
+//	dt_add_property_string(new, "compatible", "ibm,contutto-nvmem");
+	dt_add_property_string(new, "compatible", "nvdimm,byte-addressable");
 	dt_add_property_string(new, "type", "fake");
 	dt_add_property_u64s(new, "reg", reg[0], reg[1], reg[2], reg[3]);
 }
