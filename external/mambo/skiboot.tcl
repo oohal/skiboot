@@ -206,8 +206,10 @@ mysim of addprop $fake_nvram_node empty "name" "ibm,fake-nvram"
 global end_of_ram
 set reg [mysim of getprop $mem0_node "reg"]
 set end_of_ram [lindex "$reg" 1]
+
 set nvm_bus [mysim of addchild $root_node "nonvolatile-memory" ""]
 mysim of addprop $nvm_bus empty "ranges" ""
+mysim of addprop $nvm_bus string "compatible" "nonvolatile-memory"
 
 for { set r 0 } { $r < $mconf(nvm_regions) } { incr r } {
 	set end_of_ram [format "0x%x" [expr $end_of_ram - $mconf(nvm_size)]]

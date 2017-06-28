@@ -565,7 +565,8 @@ void __noreturn load_and_boot_kernel(bool is_reboot)
 static void add_nvmem_node(u64 base, u64 length)
 {
 	struct dt_node *new, *bus;
-	u64 reg[4] = {base, length - NVM_RESERVE_SIZE, base + length - NVM_RESERVE_SIZE, NVM_RESERVE_SIZE};
+	//u64 reg[4] = {base, length - NVM_RESERVE_SIZE, base + length - NVM_RESERVE_SIZE, NVM_RESERVE_SIZE};
+	u64 reg[2] = {base, length};
 
 	assert(length > NVM_RESERVE_SIZE);
 
@@ -583,7 +584,9 @@ static void add_nvmem_node(u64 base, u64 length)
 //	dt_add_property_string(new, "compatible", "ibm,contutto-nvmem");
 	dt_add_property_string(new, "compatible", "nvdimm,byte-addressable");
 	dt_add_property_string(new, "type", "fake");
-	dt_add_property_u64s(new, "reg", reg[0], reg[1], reg[2], reg[3]);
+	dt_add_property_u64s(new, "reg", reg[0], reg[1]);
+
+//	dt_add_property_u64s(new, "reg", reg[0], reg[1], reg[2], reg[3]);
 }
 
 /*
@@ -629,7 +632,11 @@ static void steal_memory(u64 max_size)
 			mem_node->name, chosen_reg[0], chosen_reg[0] + chosen_reg[1]);
 
 		/* Either borrow 1/4 of the memory node or max_size bytes */
+		if (chosen_reg[1] < max_size)
+			max_size /= 2;
 		length = min(chosen_reg[1] / 4, max_size);
+
+
 		base = chosen_reg[0] + chosen_reg[1] - length;
 
 		taken = length;
@@ -686,8 +693,8 @@ static void dt_fixups(void)
 	}
 
 
-#define NVRAM_STEAL_SIZE (128ul * 1024ul * 1024ul)
-#define NVRAM_REGIONS    2
+#define NVRAM_STEAL_SIZE (32ul * 1024ul * 1024ul * 1024ul)
+#define NVRAM_REGIONS    1
 
 	/* Populate NVDIMM ranges */
 	for (i = 0; i < NVRAM_REGIONS; i++) {
