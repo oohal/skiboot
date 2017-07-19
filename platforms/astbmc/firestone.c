@@ -133,12 +133,20 @@ static const struct slot_table_entry firestone_phb_table[] = {
 
 static bool firestone_probe(void)
 {
+	struct dt_node *xscom, *child, *next;
+
 	if (!dt_node_is_compatible(dt_root, "ibm,firestone"))
 		return false;
 
 	/* Lot of common early inits here */
 	astbmc_early_init();
 	slot_table_init(firestone_phb_table);
+
+	/* prune all i2c masters from the xscom nodes */
+	dt_for_each_compatible(dt_root, xscom, "ibm,power8-xscom")
+		list_for_each_safe(&xscom->children, child, next, list)
+			if (dt_node_is_compatible(child, "ibm,power8-i2cm"))
+				dt_free(child);
 
 	return true;
 }
