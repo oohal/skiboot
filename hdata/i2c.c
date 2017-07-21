@@ -194,9 +194,8 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 	}
 
 	if (version != 1) {
-		prerror("I2C: HDAT version %d not supported! THIS IS A BUG\n",
-			version);
-		return -1;
+		prerror("I2C: Got HDAT version %d, forcing v1\n", version);
+		version = 1;
 	}
 
 	count = HDIF_get_iarray_size(hdr, idata_index);
