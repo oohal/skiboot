@@ -1798,6 +1798,88 @@ static struct pci_device *__pci_walk_dev(struct phb *phb,
 	return NULL;
 }
 
+/*
+ * pci_next_dev(phb, pd, pass) - Iteration worker function
+ *
+ * phb  - phb that we're iterating
+ * pd   - the last pci_device returned by pci_next_dev
+ * pass - Cookie that we use to track the iteration state. See below if you
+ *        really want to know the details.
+ */
+struct pci_device *pci_next_dev(struct phb *phb, struct pci_device *prev,
+				int *pass)
+{
+	struct pci_device *next, *last;
+	struct list_head *siblings;
+
+	assert(phb);
+
+	/* start of iteration */
+	if (!prev) {
+		*pass = 0;
+		return list_top(&phb->devices, struct pci_device, link);
+	}
+
+up:
+	assert(prev);
+
+	if (prev->parent)
+		siblings = &prev->parent->children;
+	else
+		siblings = &phb->devices;
+
+	last = list_tail(siblings, struct pci_device, link);
+	assert(last);
+
+	/*
+	 * To ensure that the iteration order matches that of pci_walk_devs
+	 * use 'pass' for book keeping. For each bus two passes are taken over
+	 * the devices in the bus which are 'odd' and 'even' passes.
+	 *
+	 * For 'even' passes we return each sibling device on the bus in order.
+	 * Once we hit the end, we increment pass and do an 'odd' pass. In
+	 * an odd pass we look for devices with children, and descend into
+	 * the bus any exist.
+	 */
+	if (prev == last) {
+		if (*pass & 1) {
+			if (!prev->parent) { /* end of pass 1 on the PHB */
+				assert(pass == 1);
+				return NULL;
+			}
+
+			(*pass) -= 2; /* go to an odd pass on the parent bus */
+			prev = prev->parent;
+			goto up;
+		} else {
+			/* end of the even pass */
+			next = list_top(siblings, struct pci_device, link);
+			(*pass)++;
+		}
+	} else {
+		next = list_entry(prev->link.next, struct pci_device, link);
+	}
+
+	/* now find the device we should return */
+	if (!(*pass & 1))
+		return next;
+
+	/* for an odd pass we scan for another child bus to descend into */
+	while (list_empty(&next->children)) {
+		if (next == last) {
+			prev = last;
+			goto up;
+		}
+
+		next = list_entry(next->link.next, struct pci_device, link);
+	}
+
+	/* increment pass since we have descended into a child bus */
+	(*pass)++;
+
+	return list_top(&next->children, struct pci_device, link);
+}
+
 struct pci_device *pci_walk_dev(struct phb *phb,
 				struct pci_device *pd,
 				int (*cb)(struct phb *,

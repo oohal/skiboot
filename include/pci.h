@@ -460,6 +460,15 @@ static inline struct phb *__pci_next_phb_idx(uint64_t *phb_id) {
 	for (uint64_t __phb_idx = 0;				\
 	     (phb = __pci_next_phb_idx(&__phb_idx)) ; )
 
+
+struct pci_device *pci_next_dev(struct phb *phb, struct pci_device *pd, int *pass);
+
+/* pass should be an int *, see pci_next_dev() for details */
+#define for_each_pci_dev(phb, pd, pass) \
+	for (pd = pci_next_dev(phb, NULL, pass); \
+		pd; \
+		pd = pci_next_dev(phb, pd, pass))
+
 /* Device tree */
 extern void pci_std_swizzle_irq_map(struct dt_node *dt_node,
 				    struct pci_device *pd,
