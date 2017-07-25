@@ -374,37 +374,6 @@ static int64_t npu2_dev_cfg_bar(void *dev, struct pci_cfg_reg_filter *pcrf,
 	return npu2_cfg_read_bar(ndev, pcrf, offset, len, data);
 }
 
-#define NPU2_CFG_READ(size, type)					\
-static int64_t npu2_cfg_read##size(struct phb *phb, uint32_t bdfn,	\
-				   uint32_t offset, type *data)		\
-{									\
-	uint32_t val;							\
-	int64_t ret;							\
-									\
-	ret = pci_virt_cfg_read(phb, bdfn, offset,			\
-				sizeof(*data), &val);			\
-	*data = (type)val;						\
-        return ret;							\
-}
-#define NPU2_CFG_WRITE(size, type)					\
-static int64_t npu2_cfg_write##size(struct phb *phb, uint32_t bdfn,	\
-				    uint32_t offset, type data)		\
-{									\
-	uint32_t val = data;						\
-	int64_t ret;							\
-									\
-	ret = pci_virt_cfg_write(phb, bdfn, offset,			\
-				 sizeof(data), val);			\
-	return ret;							\
-}
-
-NPU2_CFG_READ(8, u8);
-NPU2_CFG_READ(16, u16);
-NPU2_CFG_READ(32, u32);
-NPU2_CFG_WRITE(8, u8);
-NPU2_CFG_WRITE(16, u16);
-NPU2_CFG_WRITE(32, u32);
-
 static struct dt_node *npu2_create_memory_dn(uint64_t addr, uint64_t size)
 {
 	struct dt_node *mem;
@@ -886,58 +855,6 @@ static int64_t npu2_set_pe(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
-static int64_t npu2_get_link_state(struct pci_slot *slot __unused, uint8_t *val)
-{
-	/*
-	 * As we're emulating all PCI stuff, the link bandwidth
-	 * isn't big deal anyway.
-	 */
-	*val = OPAL_SHPC_LINK_UP_x1;
-	return OPAL_SUCCESS;
-}
-
-static int64_t npu2_get_power_state(struct pci_slot *slot __unused, uint8_t *val)
-{
-	*val = PCI_SLOT_POWER_ON;
-	return OPAL_SUCCESS;
-}
-
-static int64_t npu2_hreset(struct pci_slot *slot __unused)
-{
-	return OPAL_SUCCESS;
-}
-
-static int64_t npu2_freset(struct pci_slot *slot __unused)
-{
-	return OPAL_SUCCESS;
-}
-
-static struct pci_slot *npu2_slot_create(struct phb *phb)
-{
-	struct pci_slot *slot;
-
-	slot = pci_slot_alloc(phb, NULL);
-	if (!slot)
-		return slot;
-
-	/* Elementary functions */
-	slot->ops.get_presence_state  = NULL;
-	slot->ops.get_link_state      = npu2_get_link_state;
-	slot->ops.get_power_state     = npu2_get_power_state;
-	slot->ops.get_attention_state = NULL;
-	slot->ops.get_latch_state     = NULL;
-	slot->ops.set_power_state     = NULL;
-	slot->ops.set_attention_state = NULL;
-
-	slot->ops.prepare_link_change = NULL;
-	slot->ops.poll_link           = NULL;
-	slot->ops.hreset              = npu2_hreset;
-	slot->ops.freset              = npu2_freset;
-	slot->ops.creset              = NULL;
-
-	return slot;
-}
-
 static int64_t npu2_freeze_status(struct phb *phb __unused,
 				  uint64_t pe_number __unused,
 				  uint8_t *freeze_state,
@@ -997,12 +914,12 @@ static int64_t npu2_tce_kill(struct phb *phb, uint32_t kill_type,
 }
 
 static const struct phb_ops npu_ops = {
-	.cfg_read8		= npu2_cfg_read8,
-	.cfg_read16		= npu2_cfg_read16,
-	.cfg_read32		= npu2_cfg_read32,
-	.cfg_write8		= npu2_cfg_write8,
-	.cfg_write16		= npu2_cfg_write16,
-	.cfg_write32		= npu2_cfg_write32,
+	.cfg_read8		= pci_virt_cfg_read8,
+	.cfg_read16		= pci_virt_cfg_read16,
+	.cfg_read32		= pci_virt_cfg_read32,
+	.cfg_write8		= pci_virt_cfg_write8,
+	.cfg_write16		= pci_virt_cfg_write16,
+	.cfg_write32		= pci_virt_cfg_write32,
 	.choose_bus		= NULL,
 	.device_init		= NULL,
 	.phb_final_fixup	= npu2_phb_final_fixup,
@@ -1519,7 +1436,7 @@ static void npu2_create_phb(struct dt_node *dn)
 	npu2_populate_devices(p, dn);
 	npu2_add_phb_properties(p);
 
-	slot = npu2_slot_create(&p->phb);
+	slot = virt_slot_create(&p->phb);
 	if (!slot)
 	{
 		/**

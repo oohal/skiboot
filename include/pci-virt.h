@@ -59,7 +59,34 @@ extern struct pci_virt_device *pci_virt_add_device(struct phb *phb,
 						   uint32_t cfg_size,
 						   void *data);
 
-/* Config space accessors */
+/*
+ * The virtual config spaces is made up of three arrays (spaces) for:
+ *
+ * 	Normal
+ * 	Read only (RO)
+ * 	Write 1 to clear (W1C)
+ *
+ * The normal space is the "real" config space and if you read from it directly
+ * you will see the contents of the PCI config space. The other two come into
+ * play when writing. Writes are masked against the contents of the RO space
+ * to ensure that any bits that were marked as read only when the virtual config
+ * space was initialised will remain the same. The W1C space works similarly,
+ * with it's contents being used to generate a mask of bits to be cleared.
+ *
+ *
+ * Legend:
+ *
+ * d - struct pci_virt_device
+ * o - byte offset to read/write from
+ * s - Size of the config space IO (1/2/4)
+ * v - Value to write or the pointer to read into
+ *
+ * r - value to write into the RO space
+ * w - value to write into the W1C space
+ *
+ * In general, when setting up a config space use the PCI_VIRT_CFG_*_*() macros.
+ */
+
 #define PCI_VIRT_CFG_NORMAL_RD(d, o, s, v)	\
 	pci_virt_cfg_read_raw(d, PCI_VIRT_CFG_NORMAL, o, s, v)
 #define PCI_VIRT_CFG_NORMAL_WR(d, o, s, v)	\
@@ -81,5 +108,16 @@ extern struct pci_virt_device *pci_virt_add_device(struct phb *phb,
 	} while (0)
 #define PCI_VIRT_CFG_INIT_RO(d, o, s, v)		\
 	PCI_VIRT_CFG_INIT(d, o, s, v, 0xffffffff, 0)
+
+/* templates for use with virtual PHBs */
+int64_t pci_virt_cfg_read8(struct phb *, uint32_t, uint32_t, uint8_t *);
+int64_t pci_virt_cfg_read16(struct phb *, uint32_t, uint32_t, uint16_t *);
+int64_t pci_virt_cfg_read32(struct phb *, uint32_t, uint32_t, uint32_t *);
+
+int64_t pci_virt_cfg_write8(struct phb *, uint32_t, uint32_t, uint8_t);
+int64_t pci_virt_cfg_write16(struct phb *, uint32_t, uint32_t, uint16_t);
+int64_t pci_virt_cfg_write32(struct phb *, uint32_t, uint32_t, uint32_t);
+
+struct pci_slot *virt_slot_create(struct phb *phb);
 
 #endif /* __VIRT_PCI_H */

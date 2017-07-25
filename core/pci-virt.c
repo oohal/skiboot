@@ -17,6 +17,7 @@
 #include <skiboot.h>
 #include <pci.h>
 #include <pci-virt.h>
+#include <pci-slot.h>
 
 void pci_virt_cfg_read_raw(struct pci_virt_device *pvd,
 			   uint32_t space, uint32_t offset,
@@ -217,6 +218,35 @@ out:
 	return OPAL_SUCCESS;
 }
 
+#define PCI_VIRT_CFG_READ(size, type)						\
+int64_t pci_virt_cfg_read##size(struct phb *phb, uint32_t bdfn,		\
+				  uint32_t offset, type *data)			\
+{										\
+	uint32_t val;								\
+	int64_t ret;								\
+										\
+	ret = pci_virt_cfg_read(phb, bdfn, offset, sizeof(*data), &val);	\
+	*data = (type)val;							\
+	return ret;								\
+}
+
+#define PCI_VIRT_CFG_WRITE(size, type)						\
+int64_t pci_virt_cfg_write##size(struct phb *phb, uint32_t bdfn,		\
+				   uint32_t offset, type data)			\
+{										\
+	uint32_t val = data;                                            	\
+										\
+	return pci_virt_cfg_write(phb, bdfn, offset, sizeof(data), val);	\
+}
+
+PCI_VIRT_CFG_READ(8,   u8);
+PCI_VIRT_CFG_READ(16,  u16);
+PCI_VIRT_CFG_READ(32,  u32);
+PCI_VIRT_CFG_WRITE(8,  u8);
+PCI_VIRT_CFG_WRITE(16, u16);
+PCI_VIRT_CFG_WRITE(32, u32);
+
+
 struct pci_virt_device *pci_virt_add_device(struct phb *phb, uint32_t bdfn,
 					    uint32_t cfg_size, void *data)
 {
@@ -262,4 +292,61 @@ struct pci_virt_device *pci_virt_add_device(struct phb *phb, uint32_t bdfn,
 	list_add_tail(&phb->virt_devices, &pvd->node);
 
 	return pvd;
+}
+
+/* dummy slot management */
+
+static int64_t virt_get_link_state(struct pci_slot *slot __unused, uint8_t *val)
+{
+	/*
+	 * As we're emulating all PCI stuff, the link bandwidth
+	 * isn't big deal anyway.
+	 */
+	*val = OPAL_SHPC_LINK_UP_x1;
+	return OPAL_SUCCESS;
+}
+
+static int64_t virt_get_power_state(struct pci_slot *slot __unused, uint8_t *val)
+{
+	*val = PCI_SLOT_POWER_ON;
+	return OPAL_SUCCESS;
+}
+
+static int64_t virt_hreset(struct pci_slot *slot __unused)
+{
+	return OPAL_SUCCESS;
+}
+
+static int64_t virt_freset(struct pci_slot *slot __unused)
+{
+	/* FIXME: PHB fundamental reset, which need to be
+	 * figured out later. It's used by EEH recovery
+	 * upon fenced AT.
+	 */
+	return OPAL_SUCCESS;
+}
+
+struct pci_slot *virt_slot_create(struct phb *phb)
+{
+	struct pci_slot *slot;
+
+	slot = pci_slot_alloc(phb, NULL);
+	if (!slot)
+		return slot;
+
+	/* Elementary functions */
+	slot->ops.get_presence_state  = NULL;
+	slot->ops.get_link_state      = virt_get_link_state;
+	slot->ops.get_power_state     = virt_get_power_state;
+	slot->ops.get_attention_state = NULL;
+	slot->ops.get_latch_state     = NULL;
+	slot->ops.set_power_state     = NULL;
+	slot->ops.set_attention_state = NULL;
+	slot->ops.prepare_link_change = NULL;
+	slot->ops.poll_link           = NULL;
+	slot->ops.hreset              = virt_hreset;
+	slot->ops.freset              = virt_freset;
+	slot->ops.creset              = NULL;
+
+	return slot;
 }

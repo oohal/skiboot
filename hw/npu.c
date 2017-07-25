@@ -311,33 +311,6 @@ static struct npu_dev *bdfn_to_npu_dev(struct npu *p, uint32_t bdfn)
 	return NULL;
 }
 
-#define NPU_CFG_READ(size, type)						\
-static int64_t npu_cfg_read##size(struct phb *phb, uint32_t bdfn,		\
-				  uint32_t offset, type *data)			\
-{										\
-	uint32_t val;								\
-	int64_t ret;								\
-										\
-	ret = pci_virt_cfg_read(phb, bdfn, offset, sizeof(*data), &val);	\
-	*data = (type)val;							\
-	return ret;								\
-}
-#define NPU_CFG_WRITE(size, type)						\
-static int64_t npu_cfg_write##size(struct phb *phb, uint32_t bdfn,		\
-				   uint32_t offset, type data)			\
-{										\
-	uint32_t val = data;                                            	\
-										\
-	return pci_virt_cfg_write(phb, bdfn, offset, sizeof(data), val);	\
-}
-
-NPU_CFG_READ(8,   u8);
-NPU_CFG_READ(16,  u16);
-NPU_CFG_READ(32,  u32);
-NPU_CFG_WRITE(8,  u8);
-NPU_CFG_WRITE(16, u16);
-NPU_CFG_WRITE(32, u32);
-
 /*
  * Locate the real PCI device targeted by this NVlink by matching devices
  * against slots.
@@ -741,63 +714,6 @@ static int64_t npu_set_pe(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
-static int64_t npu_get_link_state(struct pci_slot *slot __unused, uint8_t *val)
-{
-	/* As we're emulating all PCI stuff, the link bandwidth
-	 * isn't big deal anyway.
-	 */
-	*val = OPAL_SHPC_LINK_UP_x1;
-	return OPAL_SUCCESS;
-}
-
-static int64_t npu_get_power_state(struct pci_slot *slot __unused, uint8_t *val)
-{
-	*val = PCI_SLOT_POWER_ON;
-	return OPAL_SUCCESS;
-}
-
-static int64_t npu_hreset(struct pci_slot *slot __unused)
-{
-	prlog(PR_DEBUG, "NPU: driver should call reset procedure here\n");
-
-	return OPAL_SUCCESS;
-}
-
-static int64_t npu_freset(struct pci_slot *slot __unused)
-{
-	/* FIXME: PHB fundamental reset, which need to be
-	 * figured out later. It's used by EEH recovery
-	 * upon fenced AT.
-	 */
-	return OPAL_SUCCESS;
-}
-
-static struct pci_slot *npu_slot_create(struct phb *phb)
-{
-	struct pci_slot *slot;
-
-	slot = pci_slot_alloc(phb, NULL);
-	if (!slot)
-		return slot;
-
-	/* Elementary functions */
-	slot->ops.get_presence_state  = NULL;
-	slot->ops.get_link_state      = npu_get_link_state;
-	slot->ops.get_power_state     = npu_get_power_state;
-	slot->ops.get_attention_state = NULL;
-	slot->ops.get_latch_state     = NULL;
-	slot->ops.set_power_state     = NULL;
-	slot->ops.set_attention_state = NULL;
-
-	slot->ops.prepare_link_change = NULL;
-	slot->ops.poll_link           = NULL;
-	slot->ops.hreset              = npu_hreset;
-	slot->ops.freset              = npu_freset;
-	slot->ops.creset              = NULL;
-
-	return slot;
-}
-
 static int64_t npu_freeze_status(struct phb *phb,
 				     uint64_t pe_number __unused,
 				     uint8_t *freeze_state,
@@ -907,12 +823,12 @@ static int64_t npu_err_inject(struct phb *phb, uint64_t pe_number,
 }
 
 static const struct phb_ops npu_ops = {
-	.cfg_read8		= npu_cfg_read8,
-	.cfg_read16		= npu_cfg_read16,
-	.cfg_read32		= npu_cfg_read32,
-	.cfg_write8		= npu_cfg_write8,
-	.cfg_write16		= npu_cfg_write16,
-	.cfg_write32		= npu_cfg_write32,
+	.cfg_read8		= pci_virt_cfg_read8,
+	.cfg_read16		= pci_virt_cfg_read16,
+	.cfg_read32		= pci_virt_cfg_read32,
+	.cfg_write8		= pci_virt_cfg_write8,
+	.cfg_write16		= pci_virt_cfg_write16,
+	.cfg_write32		= pci_virt_cfg_write32,
 	.choose_bus		= NULL,
 	.get_reserved_pe_number	= NULL,
 	.device_init		= NULL,
@@ -1580,7 +1496,7 @@ static void npu_create_phb(struct dt_node *dn)
 	npu_add_phb_properties(p);
 
 	/* Create PHB slot */
-	slot = npu_slot_create(&p->phb);
+	slot = virt_slot_create(&p->phb);
 	if (!slot)
 	{
 		/**
