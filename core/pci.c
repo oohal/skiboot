@@ -1798,6 +1798,39 @@ static struct pci_device *__pci_walk_dev(struct phb *phb,
 	return NULL;
 }
 
+struct pci_device *pci_next_dev(struct phb *phb, struct pci_device *pd)
+{
+	struct pci_device *next;
+
+	assert(phb);
+
+	if (!pd)
+		return list_top(&phb->devices, struct pci_device, link);
+
+	next = list_top(&pd->children, struct pci_device, link);
+	if(next)
+		return next;
+
+up:
+	if (pd->parent) {
+		if (pd == list_tail(&pd->parent->children, struct pci_device, link)) {
+			/* end of the parent's child list, jump up a level */
+			pd = pd->parent;
+			goto up;
+		}
+	} else if (pd->phb) {
+		if (pd == list_tail(&phb->devices, struct pci_device, link))
+			return NULL; /* finished! */
+	}
+
+	next = list_entry(pd->link.next, struct pci_device, link);
+
+	if (!list_empty(&next->children))
+		return list_top(&next->children, struct pci_device, link);
+
+	return next;
+}
+
 struct pci_device *pci_walk_dev(struct phb *phb,
 				struct pci_device *pd,
 				int (*cb)(struct phb *,
