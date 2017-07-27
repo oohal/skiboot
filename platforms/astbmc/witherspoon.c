@@ -197,6 +197,36 @@ static void dt_create_npu2(void)
 
 #define PHB4_SHARED_SLOT_IDX_WITHERSPOON     3
 
+static void prune_nvlinks(void)
+{
+	struct dt_node *n, *nodes[16];
+	int i = 0, j;
+
+	/* HACK: The HDAT might not have NVLink information */
+	dt_for_each_compatible(dt_root, n, "ibm,power9-npu") {
+		prerror("found %s (%p)\n", n->name, n);
+		nodes[i++] = n;
+	}
+
+	for (j = 0; j < i; j++) {
+		prerror("freeing %s (%p)\n", nodes[j]->name, nodes[j]);
+		dt_free(nodes[j]);
+	}
+
+	prerror("freed all\n");
+}
+
+static void prune_slots(void)
+{
+	dt_slots = dt_find_by_path(dt_root, "/ibm,pcie-slots");
+
+	if (dt_slots) {
+		prerror("Freeing dt_slots %p - %s\n", dt_slots, dt_slots->name);
+		dt_free(dt_slots);
+		dt_slots = NULL;
+	}
+}
+
 static bool witherspoon_probe(void)
 {
 	struct dt_node *n;
@@ -210,6 +240,9 @@ static bool witherspoon_probe(void)
 
 	/* Setup UART for use by OPAL (Linux hvc) */
 	uart_set_console_policy(UART_CONSOLE_OPAL);
+
+	prune_nvlinks();
+	prune_slots();
 
 	/* Add NPU2 bindings if we didn't create them inside the HDAT already */
 	dt_for_each_compatible(dt_root, n, "ibm,power9-npu")
