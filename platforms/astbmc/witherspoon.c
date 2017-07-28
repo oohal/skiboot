@@ -301,6 +301,9 @@ static void dt_create_npu2(void)
 
 static bool witherspoon_probe(void)
 {
+	struct dt_node *n;
+	bool found = false;
+
 	if (!dt_node_is_compatible(dt_root, "ibm,witherspoon"))
 		return false;
 
@@ -310,8 +313,12 @@ static bool witherspoon_probe(void)
 	/* Setup UART for use by OPAL (Linux hvc) */
 	uart_set_console_policy(UART_CONSOLE_OPAL);
 
-	/* Add NPU2 bindings */
-	dt_create_npu2();
+	/* Add NPU2 bindings if we didn't create them inside the HDAT already */
+	dt_for_each_compatible(dt_root, n, "ibm,power9-npu")
+		found = true;
+
+	if (!found)
+		dt_create_npu2();
 
 	slot_table_init(witherspoon_phb_table);
 
