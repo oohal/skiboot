@@ -76,7 +76,7 @@ static const struct slot_table_entry firestone_plx_slots[] = {
 
 static const struct slot_table_entry firestone_plx_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0,0),
 		.children = firestone_plx_slots,
 	},

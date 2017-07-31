@@ -68,7 +68,7 @@ static const struct slot_table_entry habanero_plx_slots[] = {
 
 static const struct slot_table_entry habanero_plx_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0,0),
 		.children = habanero_plx_slots,
 	},

@@ -66,7 +66,7 @@ static const struct slot_table_entry p8dnu_plx_slots_00[] = {
 
 static const struct slot_table_entry p8dnu_plx_up_00[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0,0),
 		.children = p8dnu_plx_slots_00,
 	},
@@ -149,7 +149,7 @@ static const struct slot_table_entry p8dnu_plx_slots[] = {
 
 static const struct slot_table_entry p8dnu_plx_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0,0),
 		.children = p8dnu_plx_slots,
 	},

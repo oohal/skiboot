@@ -76,7 +76,7 @@ static const struct slot_table_entry witherspoon_plx1_down[] = {
 
 static const struct slot_table_entry witherspoon_plx0_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0x20,0),
 		.children = witherspoon_plx0_down,
 	},
@@ -85,7 +85,7 @@ static const struct slot_table_entry witherspoon_plx0_up[] = {
 
 static const struct slot_table_entry witherspoon_plx1_up[] = {
 	{
-		.etype = st_builtin_dev,
+		.etype = st_sw_upstream,
 		.location = ST_LOC_DEVFN(0x20,0),
 		.children = witherspoon_plx1_down,
 	},
