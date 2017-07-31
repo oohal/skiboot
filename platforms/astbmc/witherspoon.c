@@ -30,78 +30,21 @@
 
 #include "astbmc.h"
 
-static const struct slot_table_entry witherspoon_gpu0[] = {
-	{
-		.etype = st_pluggable_slot,
-		.location = ST_LOC_DEVFN(0x80,0),
-		.name = "GPU0",
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry witherspoon_gpu1[] = {
-	{
-		.etype = st_pluggable_slot,
-		.location = ST_LOC_DEVFN(0xa0,0),
-		.name = "GPU1",
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry witherspoon_gpu2[] = {
-	{
-		.etype = st_pluggable_slot,
-		.location = ST_LOC_DEVFN(0xc0,0),
-		.name = "GPU2",
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry witherspoon_gpu3[] = {
-	{
-		.etype = st_pluggable_slot,
-		.location = ST_LOC_DEVFN(0x60,0),
-		.name = "GPU3",
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry witherspoon_gpu4[] = {
-	{
-		.etype = st_pluggable_slot,
-		.location = ST_LOC_DEVFN(0x80,0),
-		.name = "GPU4",
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry witherspoon_gpu5[] = {
-	{
-		.etype = st_pluggable_slot,
-		.location = ST_LOC_DEVFN(0xa0,0),
-		.name = "GPU5",
-	},
-	{ .etype = st_end },
-};
-
 static const struct slot_table_entry witherspoon_plx0_down[] = {
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x4a,0),
-		.children = witherspoon_gpu0,
-		.name = "GPU0 down",
+		.name = "GPU0",
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x4b,0),
-		.children = witherspoon_gpu1,
-		.name = "GPU1 down",
+		.name = "GPU1",
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x4c,0),
-		.children = witherspoon_gpu2,
-		.name = "GPU2 down",
+		.name = "GPU2",
 	},
 	{ .etype = st_end },
 };
@@ -110,20 +53,17 @@ static const struct slot_table_entry witherspoon_plx1_down[] = {
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x44,0),
-		.children = witherspoon_gpu3,
-		.name = "GPU3 down",
+		.name = "GPU3",
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x45,0),
-		.children = witherspoon_gpu4,
-		.name = "GPU4 down",
+		.name = "GPU4",
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x4d,0),
-		.children = witherspoon_gpu5,
-		.name = "GPU5 down",
+		.name = "GPU5",
 	},
 	{ .etype = st_end },
 };
