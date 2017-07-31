@@ -28,6 +28,15 @@
  */
 #define ST_LOC_NPU_GROUP(group_id)	(group_id << 3)
 
+/*
+ * For the .nvlink property we set the high bit to indicate that this slot
+ * has a paired NVLink. This is mainly so we can test for an nvlink by doing
+ *	 if (entry->nvlink)
+ */
+#define ST_LOC_NVLINK_VALID (1 << 31)
+#define ST_LOC_NPU_TARGET(chip_id, group_id) \
+	(ST_LOC_NVLINK_VALID | ((chip_id) << 16) | (group_id))
+
 struct slot_table_entry {
 	enum slot_table_etype {
 		st_end,		/* End of list */
@@ -39,6 +48,7 @@ struct slot_table_entry {
 	uint32_t location;
 	const char *name;
 	const struct slot_table_entry *children;
+	uint32_t nvlink; /* set by ST_LOC_NPU_GROUP */
 };
 
 extern const struct bmc_platform astbmc_ami;

@@ -35,16 +35,19 @@ static const struct slot_table_entry witherspoon_plx0_down[] = {
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0xa,0),
 		.name = "GPU0",
+		.nvlink = ST_LOC_NPU_TARGET(0, 0),
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0xb,0),
 		.name = "GPU1",
+		.nvlink = ST_LOC_NPU_TARGET(0, 1),
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0xc,0),
 		.name = "GPU2",
+		.nvlink = ST_LOC_NPU_TARGET(0, 2),
 	},
 	{ .etype = st_end },
 };
@@ -54,16 +57,19 @@ static const struct slot_table_entry witherspoon_plx1_down[] = {
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x44,0),
 		.name = "GPU3",
+		.nvlink = ST_LOC_NPU_TARGET(8, 0),
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x8,0),
 		.name = "GPU4",
+		.nvlink = ST_LOC_NPU_TARGET(8, 1),
 	},
 	{
 		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0xd,0),
 		.name = "GPU5",
+		.nvlink = ST_LOC_NPU_TARGET(8, 2),
 	},
 	{ .etype = st_end },
 };
