@@ -1,4 +1,4 @@
-/* Copyright 2015 IBM Corp.
+/* Copyright 2015-2017 IBM Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <skiboot.h>
 #include <device.h>
 #include <console.h>
@@ -23,66 +27,211 @@
 
 #include "astbmc.h"
 
-static const struct slot_table_entry *slot_top_table;
+#undef pr_fmt
+#define pr_fmt(fmt) "SLOTMAP: " fmt
 
-void slot_table_init(const struct slot_table_entry *top_table)
+#define PHB_NR(loc) ((loc) & 0xffff)
+#define PHB_CHIP(loc) (((loc) >> 16) & 0xffff)
+
+static bool is_npu_phb(const struct slot_table_entry *phb)
 {
-	slot_top_table = top_table;
+	return phb->etype == st_phb && phb->children[0].etype == st_npu_slot;
 }
 
-static const struct slot_table_entry *match_slot_phb_entry(struct phb *phb)
+static void slot_trace(struct dt_node *n)
 {
-	uint32_t chip_id = dt_get_chip_id(phb->dt_node);
-	uint32_t phb_idx = dt_prop_get_u32_def(phb->dt_node,
-					       "ibm,phb-index", 0);
-	const struct slot_table_entry *ent;
+	const char *label = NULL;
+	char *c = dt_get_path(n);
 
-	if (!slot_top_table)
-		return NULL;
+	if (dt_has_node_property(n, "label", NULL))
+		label = dt_prop_get(n, "label");
 
-	for (ent = slot_top_table; ent->etype != st_end; ent++) {
-		if (ent->etype != st_phb) {
-			prerror("SLOT: Bad DEV entry type in table !\n");
-			continue;
-		}
-		if (ent->location == ST_LOC_PHB(chip_id, phb_idx))
-			return ent;
-	}
-	return NULL;
+	prlog(PR_NOTICE, "Added slot %s%s%s\n", c,
+		label ? " - " : "", label ? label : "");
+	free(c);
 }
 
-static const struct slot_table_entry *match_slot_dev_entry(struct phb *phb,
-							   struct pci_device *pd)
+static void parse_nvlink(uint32_t nvlink, struct dt_node *slot)
 {
-	const struct slot_table_entry *parent, *ent;
-	uint32_t bdfn;
+	struct dt_node *npu, *link;
+	const char *compatible;
+	bool added = false;
+	uint32_t group_id;
+	uint32_t chip_id;
 
-	/* Find a parent recursively */
-	if (pd->parent)
-		parent = match_slot_dev_entry(phb, pd->parent);
-	else {
-		/* No parent, this is a root complex, find the PHB */
-		parent = match_slot_phb_entry(phb);
+	/* nvlink is: Valid bit | 15 bit chip id | 16 bit group_id */
+	chip_id = (nvlink >> 16) & 0x7fff;
+	group_id = nvlink & 0xffff;
+
+	prlog(PR_TRACE, "nvlink = 0x%x -> %x:%x\n", nvlink, chip_id, group_id);
+
+	if (proc_gen == proc_gen_p9)
+		compatible = "ibm,power9-npu";
+	else
+		compatible = "ibm,power8-npu";
+
+	/* find the NPU for this chip-id */
+	dt_for_each_compatible(dt_root, npu, compatible)
+		if (dt_prop_get_u32(npu->parent, "ibm,chip-id") == chip_id)
+			break;
+
+	if (!npu) {
+		char *path = dt_get_path(slot);
+		prerror("Unable to find NPU for nvlink group %x:%x on %s\n",
+			chip_id, group_id, path);
+		free(path);
+		return;
 	}
-	/* No parent ? Oops ... */
-	if (!parent || !parent->children)
-		return NULL;
-	for (ent = parent->children; ent->etype != st_end; ent++) {
-		if (ent->etype == st_phb) {
-			prerror("SLOT: Bad PHB entry type in table !\n");
-			continue;
+
+	/*
+	 * Add this property to the relevant links. Note that there
+	 * are multiple links to a group so we need to check every link
+	 */
+	dt_for_each_compatible(npu, link, "ibm,npu-link") {
+		uint32_t gid = dt_prop_get_u32_def(link,
+					"ibm,npu-group-id", ~0);
+
+		if (gid == group_id) {
+			dt_add_property_cells(link, "ibm,pcie-slot",
+				slot->phandle);
+			added = true;
 		}
-
-		/* NPU slots match on device, not function */
-		if (ent->etype == st_npu_slot)
-			bdfn = pd->bdfn & 0xf8;
-		else
-			bdfn = pd->bdfn & 0xffff;
-
-		if (ent->location == bdfn)
-			return ent;
 	}
-	return NULL;
+
+	if (!added) {
+		char *path = dt_get_path(slot);
+		prerror("Unable to find NPU links for nvlink %x:%x on %s\n",
+			chip_id, group_id, path);
+		free(path);
+	}
+}
+
+static bool parse_one_slot(struct dt_node *parent_node,
+		const struct slot_table_entry *entry);
+
+static void parse_switch(struct dt_node *parent_node,
+		const struct slot_table_entry *sw_entry)
+{
+	const struct slot_table_entry *child;
+	struct dt_node *node, *sw_node;
+
+	sw_node = dt_new(parent_node, "switch");
+	slot_trace(sw_node);
+
+	if (sw_entry->name)
+		dt_add_property_string(sw_node, "label", sw_entry->name);
+
+	dt_add_property_string(sw_node, "compatible", "ibm,pcie-internal-bus");
+	dt_add_property_cells(sw_node, "upstream-port", 0);
+	dt_add_property_cells(sw_node, "#address-cells", 1);
+	dt_add_property_cells(sw_node, "#size-cells", 0);
+
+	for (child = sw_entry->children; child->etype != st_end; child++) {
+		uint32_t dev;
+
+		/* port address is the device number i.e devfn minus the fn */
+		dev = child->location >> 3;
+
+		node = dt_new_addr(sw_node, "down-port", dev);
+		slot_trace(node);
+
+		dt_add_property_cells(node, "reg", dev);
+		dt_add_property_cells(node, "#address-cells", 2);
+		dt_add_property_cells(node, "#size-cells", 0);
+
+		if (child->name)
+			dt_add_property_string(node, "label", child->name);
+
+		parse_one_slot(node, child);
+	}
+}
+
+static bool parse_one_slot(struct dt_node *parent_node,
+		const struct slot_table_entry *entry)
+{
+	bool children = entry->children != NULL;
+	const struct slot_table_entry *child;
+	struct dt_node *node = NULL;
+
+	switch (entry->etype) {
+	case st_builtin_dev:
+	case st_pluggable_slot:
+		node = dt_new(parent_node, entry->etype == st_builtin_dev ?
+						"builtin" : "pluggable");
+		slot_trace(node);
+
+		if (entry->name)
+			dt_add_property_string(node, "label", entry->name);
+
+		if (entry->nvlink)
+			parse_nvlink(entry->nvlink, node);
+
+		break;
+
+	case st_sw_upstream:
+		parse_switch(parent_node, entry);
+		return true;
+
+	/* the other slot types */
+	default:
+		assert(0);
+		return false;
+	}
+
+	if (children)
+		for (child = entry->children; child->etype != st_end; child++)
+			parse_one_slot(node, child);
+
+	return true;
+}
+
+void slot_table_init(const struct slot_table_entry *table_root)
+{
+	const struct slot_table_entry *entry, *child;
+	/*
+	 * If dt_slots has already been populated in the device-tree then
+	 * we shouldn't try and re-populate it.
+	 */
+	dt_slots = dt_find_by_path(dt_root, "/ibm,pcie-slots");
+	if (dt_slots) {
+		prlog(PR_DEBUG, "/ibm,pcie-slots/ is already populated\n");
+		return;
+	}
+
+	prlog(PR_DEBUG, "ASTBMC: Populating /ibm,pcie-slots from slot table\n");
+
+	dt_slots = dt_new(dt_root, "ibm,pcie-slots");
+	dt_add_property_cells(dt_slots, "#address-cells", 2);
+	dt_add_property_cells(dt_slots, "#size-cells", 0);
+
+	for (entry = table_root; entry->etype != st_end; entry++) {
+		uint32_t chip = PHB_CHIP(entry->location);
+		uint32_t phb = PHB_NR(entry->location);
+		struct dt_node *node;
+
+		/* Just ignore NPUs for now */
+		if (is_npu_phb(entry))
+			continue;
+
+		node = dt_new_2addr(dt_slots, "root-complex", chip, phb);
+		slot_trace(node);
+
+		dt_add_property_cells(node, "#address-cells", 2);
+		dt_add_property_cells(node, "#size-cells", 0);
+		dt_add_property_cells(node, "reg", chip, phb);
+		dt_add_property_string(node, "compatible",
+					"ibm,pcie-root-port");
+
+
+		/*
+		 * So for some fucking stupid reason we include the root complex
+		 * device for non-pluggable slots. Skip it.
+		 */
+		child = entry->children;
+
+		if (child && child->etype == st_builtin_dev)
+			parse_one_slot(node, child->children);
+	}
 }
 
 static void add_slot_properties(struct pci_slot *slot,
@@ -90,24 +239,35 @@ static void add_slot_properties(struct pci_slot *slot,
 {
 	struct phb *phb = slot->phb;
 	struct pci_device *pd = slot->pd;
-	struct slot_table_entry *ent = slot->data;
-	size_t base_loc_code_len, slot_label_len;
+	struct dt_node *slot_node = slot->data;
 	char label[8], loc_code[LOC_CODE_SIZE];
+	size_t base_loc_code_len;
+	const char *slot_label = NULL;
 
 	if (!np)
 		return;
 
-	if (ent) {
-		dt_add_property_string(np, "ibm,slot-label", ent->name);
-		slot_label_len = strlen(ent->name);
-	} else {
-		snprintf(label, 8, "S%04x%02x", phb->opal_id, pd->secondary_bus);
-		dt_add_property_string(np, "ibm,slot-label", label);
-		slot_label_len = strlen(label);
+	/* if we have a label on the device or buse use it for the slot label */
+	if (slot_node) {
+		/* add a cross reference for the pcie slot */
+		dt_add_property_cells(np, "ibm,pcie-slot", slot_node->phandle);
+
+		if (dt_has_node_property(slot_node, "label", NULL))
+			slot_label = dt_prop_get(slot_node, "label");
+		else if (dt_has_node_property(slot_node->parent, "label", NULL))
+			slot_label = dt_prop_get(slot_node->parent, "label");
 	}
 
+	if (!slot_label) {
+		snprintf(label, 8, "S%04x%02x", phb->opal_id,
+				pd->secondary_bus);
+		slot_label = label;
+	}
+
+	dt_add_property_string(np, "ibm,slot-label", slot_label);
+
 	base_loc_code_len = phb->base_loc_code ? strlen(phb->base_loc_code) : 0;
-	if ((base_loc_code_len + slot_label_len + 1) >= LOC_CODE_SIZE)
+	if ((base_loc_code_len + strlen(slot_label) + 1) >= LOC_CODE_SIZE)
 		return;
 
 	/* Location code */
@@ -118,10 +278,7 @@ static void add_slot_properties(struct pci_slot *slot,
 		loc_code[0] = '\0';
 	}
 
-	if (ent)
-		strcat(loc_code, ent->name);
-	else
-		strcat(loc_code, label);
+	strcat(loc_code, slot_label);
 	dt_add_property(np, "ibm,slot-location-code",
 			loc_code, strlen(loc_code) + 1);
 }
@@ -185,14 +342,15 @@ static void create_dynamic_slot(struct phb *phb, struct pci_device *pd)
 
 void slot_table_get_slot_info(struct phb *phb, struct pci_device *pd)
 {
-	const struct slot_table_entry *ent;
+	struct dt_node *slot_node;
 	struct pci_slot *slot;
 	bool pluggable;
 
 	if (!pd || pd->slot)
 		return;
-	ent = match_slot_dev_entry(phb, pd);
-	if (!ent || !ent->name) {
+
+	slot_node = map_pci_dev_to_slot(phb, pd);
+	if (!slot_node) { /* XXX: might want to check the conditions exactly */
 		create_dynamic_slot(phb, pd);
 		return;
 	}
@@ -200,93 +358,19 @@ void slot_table_get_slot_info(struct phb *phb, struct pci_device *pd)
 	slot = pcie_slot_create(phb, pd);
 	assert(slot);
 
-	pluggable = !!(ent->etype == st_pluggable_slot);
-	init_slot_info(slot, pluggable, (void *)ent);
+	pluggable = !strcmp(slot_node->name, "pluggable");
+	init_slot_info(slot, pluggable, (void *) slot_node);
 }
 
-static int __pci_find_dev_by_location(struct phb *phb,
-				      struct pci_device *pd, void *userdata)
-{
-	uint16_t location = *((uint16_t *)userdata);
+extern int __print_slot(struct phb *phb, struct pci_device *pd, void *userdata);
 
-	if (!phb || !pd)
-		return 0;
-
-	if ((pd->bdfn & 0xff) == location)
-		return 1;
-
-	return 0;
-}
-
-static struct pci_device *pci_find_dev_by_location(struct phb *phb, uint16_t location)
-{
-	return pci_walk_dev(phb, NULL, __pci_find_dev_by_location, &location);
-}
-
-static struct phb* get_phb_by_location(uint32_t location)
-{
-	struct phb *phb = NULL;
-	uint32_t chip_id, phb_idx;
-
-	for_each_phb(phb) {
-		chip_id = dt_get_chip_id(phb->dt_node);
-		phb_idx = dt_prop_get_u32_def(phb->dt_node,
-					      "ibm,phb-index", 0);
-		if (location == ST_LOC_PHB(chip_id, phb_idx))
-			break;
-	}
-
-	return phb;
-}
-
-static int check_slot_table(struct phb *phb,
-			    const struct slot_table_entry *parent)
-{
-	const struct slot_table_entry *ent;
-	struct pci_device *dev = NULL;
-	int r = 0;
-
-	if (parent == NULL)
-		return 0;
-
-	for (ent = parent; ent->etype != st_end; ent++) {
-		switch (ent->etype) {
-		case st_phb:
-			phb = get_phb_by_location(ent->location);
-			if (!phb) {
-				prlog(PR_ERR, "PCI: PHB %s (%x) not found\n",
-				      ent->name, ent->location);
-				r++;
-			}
-			break;
-		case st_pluggable_slot:
-		case st_builtin_dev:
-			if (!phb)
-				break;
-			phb_lock(phb);
-			dev = pci_find_dev_by_location(phb, ent->location);
-			phb_unlock(phb);
-			if (!dev) {
-				prlog(PR_ERR, "PCI: built-in device not found: %s (loc: %x)\n",
-				      ent->name, ent->location);
-				r++;
-			}
-			break;
-		case st_end:
-		case st_npu_slot:
-			break;
-		}
-		if (ent->children)
-			r+= check_slot_table(phb, ent->children);
-	}
-	return r;
-}
-
+/* FIXME: this doesn't check shit */
 void check_all_slot_table(void)
 {
-	if (!slot_top_table)
-		return;
+	struct phb *phb;
 
 	prlog(PR_DEBUG, "PCI: Checking slot table against detected devices\n");
-	check_slot_table(NULL, slot_top_table);
+
+	for_each_phb(phb)
+		pci_walk_dev(phb, NULL, __print_slot, NULL);
 }
