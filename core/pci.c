@@ -1722,9 +1722,25 @@ static void pci_do_jobs(void (*fn)(void *))
 	free(jobs);
 }
 
+static int print_pci_dev(struct phb *phb, struct pci_device *pd, void __unused *data)
+{
+	uint32_t rev_class;
+	const char *cname;
+
+	pci_cfg_read32(phb, pd->bdfn, PCI_CFG_REV_ID, &rev_class);
+	if (pci_has_cap(pd, PCI_CFG_CAP_ID_EXP, false) && !pd->parent)
+		rev_class = (rev_class & 0xff) | 0x6040000;
+	cname = pci_class_name(rev_class >> 8);
+
+	pci_print_summary_line(phb, pd, pd->dn, rev_class, cname);
+	return 0;
+}
+
 void pci_init_slots(void)
 {
-	unsigned int i;
+	unsigned int i, pass;
+	struct phb *phb;
+	struct pci_device *pd;
 
 	/* Some PHBs may need that long to debounce the presence detect
 	 * after HW initialization.
@@ -1757,6 +1773,18 @@ void pci_init_slots(void)
 		pci_add_device_nodes(phbs[i], &phbs[i]->devices,
 				     phbs[i]->dt_node, &phbs[i]->lstate, 0);
 	}
+
+
+	prerror("--------------- walk summary:\n");
+
+	for_each_phb(phb)
+		pci_walk_dev(phb, NULL, print_pci_dev, NULL);
+
+	prerror("--------------- For each summary:\n");
+	for_each_phb(phb)
+		for_each_pci_dev(phb, pd, &pass)
+			print_pci_dev(phb, pd, NULL);
+	prerror("---------------- End of for each summary\n");
 
 	/* PHB final fixup */
 	for (i = 0; i < ARRAY_SIZE(phbs); i++) {
@@ -1844,7 +1872,7 @@ up:
 	if (prev == last) {
 		if (*pass & 1) {
 			if (!prev->parent) { /* end of pass 1 on the PHB */
-				assert(pass == 1);
+				assert(*pass == 1);
 				return NULL;
 			}
 
