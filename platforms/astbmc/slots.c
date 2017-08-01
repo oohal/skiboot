@@ -59,11 +59,14 @@ static void parse_nvlink(uint32_t nvlink, struct dt_node *slot)
 	uint32_t group_id;
 	uint32_t chip_id;
 
-	/* nvlink is: Valid bit | 15 bit chip id | 16 bit group_id */
+
+	/* nvlink is: valid bit | 15 bit chip id | 16 bit group_id */
+	//nvlink &= ~ST_LOC_NVLINK_VALID;
+	//
 	chip_id = (nvlink >> 16) & 0x7fff;
 	group_id = nvlink & 0xffff;
 
-	prlog(PR_TRACE, "nvlink = 0x%x -> %x:%x\n", nvlink, chip_id, group_id);
+	prerror("nvlink = 0x%08x -> %x:%x\n", nvlink, chip_id, group_id);
 
 	if (proc_gen == proc_gen_p9)
 		compatible = "ibm,power9-npu";
@@ -90,12 +93,16 @@ static void parse_nvlink(uint32_t nvlink, struct dt_node *slot)
 	dt_for_each_compatible(npu, link, "ibm,npu-link") {
 		uint32_t gid = dt_prop_get_u32_def(link,
 					"ibm,npu-group-id", ~0);
+		char *c;
 
-		if (gid == group_id) {
-			dt_add_property_cells(link, "ibm,pcie-slot",
-				slot->phandle);
-			added = true;
-		}
+		if (gid != group_id)
+			continue;
+
+		c = dt_get_path(link);
+		prerror("Adding ibm,pcie-slot %d to %s for %x:%x\n",
+			slot->phandle, c, chip_id, group_id);
+		dt_add_property_cells(link, "ibm,pcie-slot", slot->phandle);
+		added = true;
 	}
 
 	if (!added) {

@@ -241,8 +241,10 @@ static bool witherspoon_probe(void)
 	/* Setup UART for use by OPAL (Linux hvc) */
 	uart_set_console_policy(UART_CONSOLE_OPAL);
 
+	if (0) {
 	prune_nvlinks();
 	prune_slots();
+	}
 
 	/* Add NPU2 bindings if we didn't create them inside the HDAT already */
 	dt_for_each_compatible(dt_root, n, "ibm,power9-npu")

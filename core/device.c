@@ -117,8 +117,10 @@ bool dt_attach_root(struct dt_node *parent, struct dt_node *root)
 
 		/* Look for duplicates */
 		if (cmp == 0) {
-			prerror("DT: %s failed, duplicate %s\n",
-				__func__, root->name);
+			char *c = dt_get_path(node);
+			prerror("DT: attach failed, duplicate of %s\n", c);
+			free(c);
+
 			return false;
 		}
 
