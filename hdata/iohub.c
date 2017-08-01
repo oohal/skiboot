@@ -766,7 +766,7 @@ static void io_parse_slots(const void *sp_iohubs, int hub_id)
 	const struct slot_map_entry *entry;
 	unsigned int i, count;
 
-	dt_slots = dt_new_check(dt_root, "slots");
+	dt_slots = dt_new_check(dt_root, "ibm,pcie-slots");
 
 	ioslot_arr = HDIF_child_arr(sp_iohubs, CECHUB_CHILD_IOSLOTS);
 	if (!ioslot_arr)
