@@ -33,17 +33,17 @@
 static const struct slot_table_entry witherspoon_plx0_down[] = {
 	{
 		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0x4a,0),
+		.location = ST_LOC_DEVFN(0xa,0),
 		.name = "GPU0",
 	},
 	{
 		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0x4b,0),
+		.location = ST_LOC_DEVFN(0xb,0),
 		.name = "GPU1",
 	},
 	{
 		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0x4c,0),
+		.location = ST_LOC_DEVFN(0xc,0),
 		.name = "GPU2",
 	},
 	{ .etype = st_end },
@@ -57,12 +57,12 @@ static const struct slot_table_entry witherspoon_plx1_down[] = {
 	},
 	{
 		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0x45,0),
+		.location = ST_LOC_DEVFN(0x8,0),
 		.name = "GPU4",
 	},
 	{
 		.etype = st_builtin_dev,
-		.location = ST_LOC_DEVFN(0x4d,0),
+		.location = ST_LOC_DEVFN(0xd,0),
 		.name = "GPU5",
 	},
 	{ .etype = st_end },
