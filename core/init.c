@@ -50,6 +50,7 @@
 #include <libstb/container.h>
 #include <phys-map.h>
 #include <imc.h>
+#include <worker.h>
 
 enum proc_gen proc_gen;
 unsigned int pcie_max_link_speed;
@@ -779,6 +780,36 @@ static void pci_nvram_init(void)
 	}
 }
 
+/* worker test code */
+static const char *strings[] = {
+	"AAAAA",
+	"BBBBB",
+	"CCCCC",
+};
+
+static void test_worker(void *arg)
+{
+	const char **strings = arg;
+	int i = 0;
+
+	while (1) {
+		prerror("WORKER: %d - %s\n", i, strings[i % 3]);
+		i++;
+
+		work_delay(this_cpu()->cur_worker, msecs_to_tb(1000));
+	}
+}
+
+static void __unused  init_worker(void)
+{
+	struct worker *w = new_worker(test_worker, strings);
+
+	prerror("WORKER: Starting\n");
+	start_work(w);
+
+	prerror("WORKER: Started w = %p\n", w);
+}
+
 /* Called from head.S, thus no prototype. */
 void main_cpu_entry(const void *fdt);
 
@@ -957,6 +988,9 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 	 * all core timebases to the global ChipTOD network
 	 */
 	chiptod_init();
+
+	/* now that the timers are up, start a worker */
+	init_worker();
 
 	/* Initialize i2c */
 	p8_i2c_init();
