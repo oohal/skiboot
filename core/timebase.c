@@ -19,6 +19,7 @@
 #include <opal.h>
 #include <cpu.h>
 #include <chip.h>
+#include <worker.h>
 
 unsigned long tb_hz = 512000000;
 
@@ -27,9 +28,15 @@ static void time_wait_poll(unsigned long duration)
 	unsigned long now = mftb();
 	unsigned long end = now + duration;
 	unsigned long period = msecs_to_tb(5);
+	struct cpu_thread *c = this_cpu();
 
-	if (this_cpu()->tb_invalid) {
+	if (c->tb_invalid) {
 		cpu_relax();
+		return;
+	}
+
+	if (c->cur_worker) {
+		work_delay(c->cur_worker, mftb() + duration);
 		return;
 	}
 

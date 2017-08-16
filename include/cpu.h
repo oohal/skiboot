@@ -41,6 +41,7 @@ enum cpu_thread_state {
 };
 
 struct cpu_job;
+struct worker;
 struct xive_cpu_state;
 
 struct cpu_thread {
@@ -52,6 +53,7 @@ struct cpu_thread {
 	enum cpu_thread_state		state;
 	struct dt_node			*node;
 	struct trace_info		*trace;
+	struct worker			*cur_worker;
 	uint64_t			save_r1;
 	void				*icp_regs;
 	uint32_t			lock_depth;
