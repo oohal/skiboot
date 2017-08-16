@@ -124,6 +124,8 @@ cleanup_global_tlb:
 
 	blr
 
+/* __worker_swap(struct stack_frame **old, struct stack_frame *new); */
+
 .global __worker_swap
 __worker_swap:
 	mflr	%r0
@@ -156,19 +158,20 @@ __worker_swap:
 	SAVE_GPR(29,%r1)
 	SAVE_GPR(30,%r1)
 	SAVE_GPR(31,%r1)
-	mfcr	%r3
-	mfxer	%r4
-	stw	%r3,STACK_CR(%r1)
-	stw	%r4,STACK_XER(%r1)
+	mfcr	%r6 /* don't want to trash r3 / r4 */
+	mfxer	%r7
+	stw	%r6,STACK_CR(%r1)
+	stw	%r7,STACK_XER(%r1)
 
 	/* Swap stack pointer */
 	mr	%r1,%r4
 
 	/* Restore stuff */
 	lwz	%r3,STACK_CR(%r1)
-	lwz	%r4,STACK_XER(%r1)
 	mtcr	%r3
+	lwz	%r4,STACK_XER(%r1)
 	mtxer	%r4
+
 	REST_GPR(2,%r1)
 	REST_GPR(14,%r1)
 	REST_GPR(15,%r1)
