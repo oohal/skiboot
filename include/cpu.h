@@ -193,6 +193,8 @@ extern u8 get_available_nr_cores_in_chip(u32 chip_id);
 		core = next_available_core_in_chip(core, chip_id))
 
 /* Return the caller CPU (only after init_cpu_threads) */
+register void *__sp asm("r1");
+register void *__toc asm("r2");
 register struct cpu_thread *__this_cpu asm("r13");
 static inline __nomcount struct cpu_thread *this_cpu(void)
 {
