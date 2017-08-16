@@ -92,7 +92,7 @@ struct stack_frame {
 	uint64_t	srr1;
 	uint64_t	hsrr0;
 	uint64_t	hsrr1;
-} __attribute__((aligned(16)));
+} __attribute__((aligned(16))) __packed;
 
 /* Backtrace */
 struct bt_entry {
