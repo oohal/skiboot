@@ -126,7 +126,7 @@ struct worker *new_worker(worker_entry_t entry, void *arg)
 	}
 	memset(w->stack, 0, STACK_SIZE);
 	w->frame = w->stack + STACK_SIZE - sizeof(STACK_SIZE) - 0x100;
-	w->frame->pc = (uint64_t)entry;
+	w->frame->pc = *((uint64_t *) entry); // dereference the OPD
 	w->frame->gpr[3] = (uint64_t)arg;
 	w->state = worker_off;
 
