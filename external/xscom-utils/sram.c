@@ -24,13 +24,13 @@
 #define DBG(fmt...)	do { if (verbose) printf(fmt); } while(0)
 #define ERR(fmt...)	do { fprintf(stderr, fmt); } while(0)
 
-#define OCB_PIB_OCBCSR0_0x0006B011	0x0006B011
-#define OCB_PIB_OCBCSR0_ANDx0006B012	0x0006B012
-#define OCB_PIB_OCBCSR0_ORx0006B013	0x0006B013
+#define OCB_PIB_OCBCSR0_0x0006B011	0x0006D011
+#define OCB_PIB_OCBCSR0_ANDx0006B012	0x0006D012
+#define OCB_PIB_OCBCSR0_ORx0006B013	0x0006D013
 #define   OCB_STREAM_MODE			PPC_BIT(4)
 #define   OCB_STREAM_TYPE			PPC_BIT(5)
-#define OCB_PIB_OCBAR0_0x0006B010	0x0006B010
-#define OCB_PIB_OCBDR0_0x0006B015	0x0006B015
+#define OCB_PIB_OCBAR0_0x0006B010	0x0006D010
+#define OCB_PIB_OCBDR0_0x0006B015	0x0006D015
 
 int sram_read(uint32_t chip_id, int chan, uint32_t addr, uint64_t *val)
 {
