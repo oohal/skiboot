@@ -26,8 +26,11 @@
 
 static void print_usage(int code)
 {
-	printf("usage: getsram [-c|--chip chip-id] addr\n");
-	printf("               [--occ-channel|n <chan>]\n");
+	printf("usage: getsram [opts] addr\n");
+	printf("	-c|--chip <chip-id>\n");
+	printf("	-l|--length <size to read>\n");
+	printf("        -n|--occ-channel <chan>\n");
+	printf("	-f|--file <filename>\n");
 	printf("       getsram -v|--version\n");
 	exit(code);
 }
