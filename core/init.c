@@ -693,7 +693,7 @@ static void dt_fixups(void)
 	}
 
 
-#define NVRAM_STEAL_SIZE (32ul * 1024ul * 1024ul * 1024ul)
+#define NVRAM_STEAL_SIZE (128ul * 1024ul * 1024ul)
 #define NVRAM_REGIONS    1
 
 	/* Populate NVDIMM ranges */
