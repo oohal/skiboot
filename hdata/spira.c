@@ -1142,7 +1142,10 @@ static void dt_init_vpd_node(void)
 
 	dt_vpd = dt_new(dt_root, "vpd");
 	assert(dt_vpd);
+
 	dt_add_property_string(dt_vpd, "compatible", "ibm,opal-v3-vpd");
+	dt_add_property_cells(dt_vpd, "#address-cells", 1);
+	dt_add_property_cells(dt_vpd, "#size-cells", 0);
 }
 
 static void hostservices_parse(void)
