@@ -403,6 +403,14 @@ static struct dt_node *dt_create_vpd_node(struct dt_node *parent,
 		return NULL;
 	}
 
+	/*
+	 * no one is sure what this is or what it means, we're adding it here
+	 * to stop dtc from complaining about it.
+	 */
+	dt_add_property_cells(node, "reg", addr);
+	dt_add_property_cells(node, "#address-cells", 1);
+	dt_add_property_cells(node, "#size-cells", 0);
+
 	/* Add location code */
 	slca_vpd_add_loc_code(node, be16_to_cpu(entry->my_index));
 	/* Add FRU label */
