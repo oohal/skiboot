@@ -200,44 +200,6 @@ static const struct slot_table_entry witherspoon_plx1_phb[] = {
 	{ .etype = st_end },
 };
 
-static const struct slot_table_entry witherspoon_npu0_slots[] = {
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(0),
-		.name = "GPU0",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(1),
-		.name = "GPU1",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(2),
-		.name = "GPU2",
-	},
-	{ .etype = st_end },
-};
-
-static const struct slot_table_entry witherspoon_npu8_slots[] = {
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(0),
-		.name = "GPU3",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(1),
-		.name = "GPU4",
-	},
-	{
-		.etype = st_npu_slot,
-		.location = ST_LOC_NPU_GROUP(2),
-		.name = "GPU5",
-	},
-	{ .etype = st_end },
-};
-
 /*
  * Slot numbering:
  *
@@ -251,87 +213,14 @@ static const struct slot_table_entry witherspoon_phb_table[] = {
 	ST_PHB_ENTRY(0, 0, witherspoon_slot4),
 	ST_PHB_ENTRY(0, 3, witherspoon_slot2_shared),
 	ST_PHB_ENTRY(0, 4, witherspoon_plx0_phb),
-	ST_PHB_ENTRY(0, 7, witherspoon_npu0_slots),
 
 	ST_PHB_ENTRY(8, 0, witherspoon_slot3),
 	ST_PHB_ENTRY(8, 3, witherspoon_slot2_shared),
 	ST_PHB_ENTRY(8, 4, witherspoon_slot1),
 	ST_PHB_ENTRY(8, 5, witherspoon_plx1_phb),
-	ST_PHB_ENTRY(8, 8, witherspoon_npu8_slots),
 
 	{ .etype = st_end },
 };
-
-#define NPU_BASE 0x5011000
-#define NPU_SIZE 0x2c
-#define NPU_INDIRECT0	0x8000000009010c3f
-#define NPU_INDIRECT1	0x800000000c010c3f
-
-static void create_link(struct dt_node *npu, int group, int index)
-{
-	struct dt_node *link;
-	uint32_t lane_mask;
-	uint64_t phy;
-	char namebuf[32];
-
-	snprintf(namebuf, sizeof(namebuf), "link@%x", index);
-	link = dt_new(npu, namebuf);
-
-	dt_add_property_string(link, "compatible", "ibm,npu-link");
-	dt_add_property_cells(link, "ibm,npu-link-index", index);
-
-	if (!(index / 3))
-		phy = NPU_INDIRECT0;
-	else
-		phy = NPU_INDIRECT1;
-
-	switch (index % 3) {
-	case 0:
-		lane_mask = 0xf1e000;
-		break;
-
-	case 1:
-		lane_mask = 0x0e1870;
-		break;
-
-	case 2:
-		lane_mask = 0x00078f;
-		break;
-
-	default:
-		assert(0);
-	}
-
-	dt_add_property_u64s(link, "ibm,npu-phy", phy);
-	dt_add_property_cells(link, "ibm,npu-lane-mask", lane_mask);
-	dt_add_property_cells(link, "ibm,npu-group-id", group);
-}
-
-static void dt_create_npu2(void)
-{
-        struct dt_node *xscom, *npu;
-        char namebuf[32];
-	int phb_index = 7;
-	int npu_index = 0;
-
-	dt_for_each_compatible(dt_root, xscom, "ibm,xscom") {
-		snprintf(namebuf, sizeof(namebuf), "npu@%x", NPU_BASE);
-		npu = dt_new(xscom, namebuf);
-		dt_add_property_cells(npu, "reg", NPU_BASE, NPU_SIZE);
-		dt_add_property_strings(npu, "compatible", "ibm,power9-npu");
-
-		dt_add_property_cells(npu, "ibm,phb-index", phb_index++);
-		dt_add_property_cells(npu, "ibm,npu-index", npu_index++);
-		dt_add_property_cells(npu, "ibm,npu-links", 6);
-
-		create_link(npu, 0, 0);
-		create_link(npu, 0, 1);
-		create_link(npu, 1, 2);
-		create_link(npu, 1, 3);
-		create_link(npu, 2, 4);
-		create_link(npu, 2, 5);
-	}
-}
 
 static bool witherspoon_probe(void)
 {
@@ -344,10 +233,22 @@ static bool witherspoon_probe(void)
 	/* Setup UART for use by OPAL (Linux hvc) */
 	uart_set_console_policy(UART_CONSOLE_OPAL);
 
-	/* Add NPU2 bindings */
-	dt_create_npu2();
+	/*
+	 * Check if we got PCI slot information from the HDAT. If it's missing
+	 * then we have an old firmware without IOSLOT/SMP Link information.
+	 * Without these we don't know the NVLink topology (what GPU maps to
+	 * which NPU), so we can't do anything meaningful here.
+	 */
+	if (dt_find_by_name(dt_root, "ibm,pcie-slots"))
+		return true;
 
 	slot_table_init(witherspoon_phb_table);
+
+	/* HACK: we probably shouldn't be modifying the platform struct */
+	witherspoon_platform.pci_get_slot_info = slot_table_get_slot_info;
+	witherspoon_platform.pci_probe_complete = check_all_slot_table;
+
+	prerror("Old witherspoon firmware detected. NVLink is not supported\n");
 
 	return true;
 }
