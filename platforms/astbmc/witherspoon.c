@@ -222,9 +222,17 @@ static const struct slot_table_entry witherspoon_phb_table[] = {
 	{ .etype = st_end },
 };
 
+/*
+ * Check if we got PCI slot information from the HDAT. If it's missing
+ * then we have an old firmware without IOSLOT/SMP Link information.
+ * Without these we don't know the NVLink topology (what GPU maps to
+ * which NPU), so we can't do anything meaningful here.
+ */
 static bool witherspoon_probe(void)
 {
 	if (!dt_node_is_compatible(dt_root, "ibm,witherspoon"))
+		return false;
+	if (!dt_find_by_name(dt_root, "ibm,pcie-slots"))
 		return false;
 
 	/* Lot of common early inits here */
@@ -233,22 +241,25 @@ static bool witherspoon_probe(void)
 	/* Setup UART for use by OPAL (Linux hvc) */
 	uart_set_console_policy(UART_CONSOLE_OPAL);
 
-	/*
-	 * Check if we got PCI slot information from the HDAT. If it's missing
-	 * then we have an old firmware without IOSLOT/SMP Link information.
-	 * Without these we don't know the NVLink topology (what GPU maps to
-	 * which NPU), so we can't do anything meaningful here.
-	 */
+	return true;
+}
+
+static bool old_witherspoon_probe(void)
+{
+	if (!dt_node_is_compatible(dt_root, "ibm,witherspoon"))
+		return false;
 	if (dt_find_by_name(dt_root, "ibm,pcie-slots"))
-		return true;
-
-	slot_table_init(witherspoon_phb_table);
-
-	/* HACK: we probably shouldn't be modifying the platform struct */
-	witherspoon_platform.pci_get_slot_info = slot_table_get_slot_info;
-	witherspoon_platform.pci_probe_complete = check_all_slot_table;
+		return false;
 
 	prerror("Old witherspoon firmware detected. NVLink is not supported\n");
+
+	/* Lot of common early inits here */
+	astbmc_early_init();
+
+	/* Setup UART for use by OPAL (Linux hvc) */
+	uart_set_console_policy(UART_CONSOLE_OPAL);
+
+	slot_table_init(witherspoon_phb_table);
 
 	return true;
 }
@@ -338,7 +349,9 @@ static void witherspoon_pre_pci_fixup(void)
 	phb4_pre_pci_fixup_witherspoon();
 }
 
-DECLARE_PLATFORM(witherspoon_platform) = {
+/* The only difference between these is the PCI slot handling */
+
+DECLARE_PLATFORM(witherspoon) = {
 	.name			= "Witherspoon",
 	.probe			= witherspoon_probe,
 	.init			= astbmc_init,
@@ -346,11 +359,29 @@ DECLARE_PLATFORM(witherspoon_platform) = {
 	.start_preload_resource	= flash_start_preload_resource,
 	.resource_loaded	= flash_resource_loaded,
 	.bmc			= &astbmc_openbmc,
-	.pci_get_slot_info	= slot_table_get_slot_info,
-	.pci_probe_complete	= check_all_slot_table,
 	.cec_power_down         = astbmc_ipmi_power_down,
 	.cec_reboot             = astbmc_ipmi_reboot,
 	.elog_commit		= ipmi_elog_commit,
 	.exit			= ipmi_wdt_final_reset,
 	.terminate		= ipmi_terminate,
+
+	.pci_get_slot_info	= map_pci_dev_to_slot,
+};
+
+DECLARE_PLATFORM(old_witherspoon) = {
+	.name			= "Witherspoon (old)",
+	.probe			= old_witherspoon_probe,
+	.init			= astbmc_init,
+	.pre_pci_fixup		= witherspoon_pre_pci_fixup,
+	.start_preload_resource	= flash_start_preload_resource,
+	.resource_loaded	= flash_resource_loaded,
+	.bmc			= &astbmc_openbmc,
+	.cec_power_down         = astbmc_ipmi_power_down,
+	.cec_reboot             = astbmc_ipmi_reboot,
+	.elog_commit		= ipmi_elog_commit,
+	.exit			= ipmi_wdt_final_reset,
+	.terminate		= ipmi_terminate,
+
+	.pci_get_slot_info	= slot_table_get_slot_info,
+	.pci_probe_complete	= check_all_slot_table,
 };
