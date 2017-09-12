@@ -40,11 +40,16 @@ static void dump_regs(struct stack_frame *stack)
 /* Called from head.S, thus no prototype */
 void exception_entry(struct stack_frame *stack) __noreturn;
 
+static struct lock ex_lock = LOCK_UNLOCKED;
+
 void exception_entry(struct stack_frame *stack)
 {
+	lock(&ex_lock);
 	prerror("***********************************************\n");
 	prerror("Unexpected exception %llx !\n", stack->type);
 	dump_regs(stack);
+	unlock(&ex_lock);
+
 	abort();
 }
 
