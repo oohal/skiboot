@@ -765,6 +765,7 @@ static void parse_one_slot(const struct slot_map_entry *entry,
 	if (strnlen(entry->name, sizeof(entry->name)))
 		dt_add_property_nstr(node, "ibm,slot-label",
 				entry->name, sizeof(entry->name));
+
 	if (entry->type == st_slot || entry->type == st_rc_slot)
 		dt_add_property(node, "ibm,pluggable", NULL, 0);
 

@@ -64,7 +64,7 @@ static uint8_t old_vectors[0x2000];
 #ifdef SKIBOOT_GCOV
 void skiboot_gcov_done(void);
 #endif
-
+#define DEBUG
 struct debug_descriptor debug_descriptor = {
 	.eye_catcher	= "OPALdbug",
 	.version	= DEBUG_DESC_VERSION,

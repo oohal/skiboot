@@ -1316,6 +1316,8 @@ static void add_npu(struct dt_node *xscom, const struct HDIF_array_hdr *links,
 		if (be32_to_cpu(link->usage) != SMP_LINK_USE_DEVICE)
 			continue;
 
+		prerror("NPU: found link targeting slot %u", slot_id);
+
 		node = dt_new_addr(npu, "link", link_id);
 		if (!node) {
 			prerror("NPU: Unable to add link %d to %s\n",
@@ -1362,6 +1364,7 @@ static void add_npu(struct dt_node *xscom, const struct HDIF_array_hdr *links,
 			dt_add_property_cells(node, "ibm,npu-group-id", group);
 
 			slot = find_slot_entry_node(dt_root, slot_id);
+			prerror("NPU: for %u got %s\n", slot_id, slot->name);
 			if (!slot) {
 				char *path = dt_get_path(node);
 				prerror("NPU: Unable to find target slot (eid %x) of %s\n",
