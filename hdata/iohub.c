@@ -653,11 +653,6 @@ static void parse_one_slot(const struct slot_map_entry *entry,
 		return;
 
 	if (type != st_root && type != st_rc_slot) {
-		if (eid <= pid) {
-			SM_ERR("Attempted to add slot before it's parent (%d)\n", pid);
-			return;
-		}
-
 		parent = find_slot_entry_node(dt_slots, pid);
 		if (!parent) {
 			SM_ERR("Unable to find node for parent slot (id = %d)\n",
