@@ -697,9 +697,14 @@ static void parse_one_slot(const struct slot_map_entry *entry,
 				st_name(st_root), st_name(st_sw_downstream));
 			return;
 		}
-
+#if 0
+		/* re-enable this when the source data isn't broken */
 		vid = (be32_to_cpu(entry->vendor_id) & 0xffff);
 		did = (be32_to_cpu(entry->device_id) & 0xffff);
+#else
+		vid = 0;
+		did = 0;
+#endif
 
 		prlog(PR_DEBUG, "Found %s slot with %x:%x\n",
 			st_name(type), vid, did);
