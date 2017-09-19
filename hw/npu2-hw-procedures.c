@@ -185,11 +185,32 @@ static uint32_t stop(struct npu2_dev *npu_dev __unused)
 }
 DEFINE_PROCEDURE(stop);
 
-static uint32_t nop(struct npu2_dev *npu_dev __unused)
+static uint32_t nop(struct npu2_dev *ndev __unused)
 {
+	int lane;
+
+	prerror("LANE POWER UP\n");
+	FOR_EACH_LANE(ndev, lane) {
+		phy_write_lane(ndev, &NPU2_PHY_RX_LANE_ANA_PDWN, lane, 0);
+		phy_write_lane(ndev, &NPU2_PHY_RX_LANE_DIG_PDWN, lane, 0);
+		phy_write_lane(ndev, &NPU2_PHY_TX_LANE_PDWN, lane, 0);
+	}
+
 	return PROCEDURE_COMPLETE;
 }
 DEFINE_PROCEDURE(nop);
+
+static uint32_t nop1(struct npu2_dev *ndev __unused)
+{
+	prerror("PHY POWER UP\n");
+	phy_write(ndev, &NPU2_PHY_RX_CLKDIST_PDWN, 0);
+	phy_write(ndev, &NPU2_PHY_RX_IREF_PDWN, 1);
+	phy_write(ndev, &NPU2_PHY_TX_CLKDIST_PDWN, 0);
+	phy_write(ndev, &NPU2_PHY_RX_CTL_DATASM_CLKDIST_PDWN, 0);
+
+	return PROCEDURE_COMPLETE;
+}
+DEFINE_PROCEDURE(nop1);
 
 /* Procedure 1.2.1 (RESET_NPU_DL) from opt_programmerguide.odt. Also
  * incorporates AT reset. */
@@ -605,7 +626,7 @@ DEFINE_PROCEDURE(phy_rx_training, phy_rx_training_wait);
 static struct procedure *npu_procedures[] = {
 	&procedure_stop,
 	&procedure_nop,
-	NULL,
+	&procedure_nop1,
 	NULL,
 	&procedure_phy_reset,
 	&procedure_phy_tx_zcal,
