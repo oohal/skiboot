@@ -1290,6 +1290,8 @@ static void add_npu(struct dt_node *xscom, const struct HDIF_array_hdr *links,
 	int link_count = 0;
 	uint32_t size, chip_id;
 	int i;
+	static int hack_count = 0;
+
 
 	size = be32_to_cpu(links->esize);
 	chip_id = dt_get_chip_id(xscom);
@@ -1304,6 +1306,26 @@ static void add_npu(struct dt_node *xscom, const struct HDIF_array_hdr *links,
 	dt_add_property_strings(npu, "compatible", "ibm,power9-npu");
 	dt_add_property_cells(npu, "ibm,phb-index", phb_index);
 	dt_add_property_cells(npu, "ibm,npu-index", npu_index);
+
+	HDIF_iarray_for_each(links, i, link) {
+		struct sppcrd_smp_link *hack = (struct sppcrd_smp_link *) link;
+		int base[2] = {11, 24};
+		uint32_t new_slot = 0xffffff;
+
+		switch(be32_to_cpu(link->link_id)) {
+			case 0: case 2:
+				new_slot = base[hack_count];
+				break;
+			case 4: case 6:
+				new_slot = base[hack_count] + 2;
+				break;
+			case 8: case 10:
+				new_slot = base[hack_count] + 4;
+				break;
+		}
+		hack->pci_slot_idx = be16_to_cpu( new_slot );
+	}
+	hack_count++;
 
 	HDIF_iarray_for_each(links, i, link) {
 		uint16_t slot_id = be16_to_cpu(link->pci_slot_idx);
