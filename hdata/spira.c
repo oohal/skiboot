@@ -258,7 +258,6 @@ static struct dt_node *add_xscom_node(uint64_t base, uint32_t hw_id,
 		return NULL;
 
 	dt_add_property_cells(node, "ibm,chip-id", hw_id);
-	dt_add_property_cells(node, "ibm,physical-chip-id", phys_chip_id);
 	dt_add_property_cells(node, "ibm,proc-chip-id", proc_chip_id);
 	dt_add_property_cells(node, "#address-cells", 1);
 	dt_add_property_cells(node, "#size-cells", 1);
