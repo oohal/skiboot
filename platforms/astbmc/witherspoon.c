@@ -449,9 +449,16 @@ static void phb4_pre_pci_fixup_witherspoon(void)
 		return;
 	}
 
+	/* if we booted with a swapped chip IDs, fix it up now */
+	if (chip0->id != chip0->phys_id) {
+		struct proc_chip *tmp = chip1;
+		chip0 = chip1;
+		chip1 = tmp;
+	}
+
 	/* the shared slot is connected to PHB3 on both chips */
-	slot0 = pci_slot_find(phb4_get_opal_id(chip0->id, 3));
-	slot1 = pci_slot_find(phb4_get_opal_id(chip1->id, 3));
+	slot0 = pci_slot_find(phb4_get_opal_id(chip0, 3));
+	slot1 = pci_slot_find(phb4_get_opal_id(chip1, 3));
 	if (slot0 && slot1) {
 		if (slot0->ops.get_presence_state)
 			slot0->ops.get_presence_state(slot0, &p0);

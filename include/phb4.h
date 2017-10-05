@@ -20,6 +20,7 @@
 #define __PHB4_H
 
 #include <interrupts.h>
+#include <chip.h>
 
 /*
  * Memory map
@@ -229,6 +230,7 @@ struct phb4 {
 	unsigned int		index;	    /* 0..5 index inside p9 */
 	unsigned int		flags;
 	unsigned int		chip_id;    /* Chip ID (== GCID on p9) */
+	unsigned int		phys_chip_id;
 	enum phb4_state		state;
 	unsigned int		rev;        /* 00MMmmmm */
 #define PHB4_REV_NIMBUS_DD10	0xa40001
@@ -311,9 +313,9 @@ static inline void phb4_set_err_pending(struct phb4 *p, bool pending)
 
 #define PHB4_PER_CHIP                        6 /* Max 6 PHBs per chip on p9 */
 
-static inline int phb4_get_opal_id(unsigned int chip_id, unsigned int index)
+static inline int phb4_get_opal_id(struct proc_chip *chip, unsigned int index)
 {
-	return chip_id * PHB4_PER_CHIP + index;
+	return chip->phys_id * PHB4_PER_CHIP + index;
 }
 
 #endif /* __PHB4_H */

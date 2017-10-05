@@ -4810,6 +4810,7 @@ static void phb4_create(struct dt_node *np)
 	p->index = dt_prop_get_u32(np, "ibm,phb-index");
 	p->chip_id = dt_prop_get_u32(np, "ibm,chip-id");
 	chip = get_chip(p->chip_id);
+	p->phys_chip_id = chip->phys_id;
 	p->regs = (void *)dt_get_address(np, 0, NULL);
 	p->int_mmio = (void *)dt_get_address(np, 1, NULL);
 	p->phb.dt_node = np;
@@ -4856,7 +4857,7 @@ static void phb4_create(struct dt_node *np)
 	/* We register the PHB before we initialize it so we
 	 * get a useful OPAL ID for it
 	 */
-	pci_register_phb(&p->phb, phb4_get_opal_id(p->chip_id, p->index));
+	pci_register_phb(&p->phb, phb4_get_opal_id(chip, p->index));
 
 	/* Create slot structure */
 	slot = phb4_slot_create(&p->phb);
