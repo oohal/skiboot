@@ -156,6 +156,7 @@ static inline bool chip_quirk(unsigned int q)
  */
 struct proc_chip {
 	uint32_t		id;		/* HW Chip ID (GCID) */
+	uint32_t		phys_id;	/* Physical chip ID  */
 	struct dt_node		*devnode;	/* "xscom" chip node */
 
 	/* These are only initialized after xcom_init */

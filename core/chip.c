@@ -89,6 +89,7 @@ static void init_chip(struct dt_node *dn)
 
 	chip->dbob_id = dt_prop_get_u32_def(dn, "ibm,dbob-id", 0xffffffff);
 	chip->pcid = dt_prop_get_u32_def(dn, "ibm,proc-chip-id", 0xffffffff);
+	chip->phys_id = dt_prop_get_u32_def(dn, "ibm,phys-chip-id", id);
 
 	if (dt_prop_get_u32_def(dn, "ibm,occ-functional-state", 0))
 		chip->occ_functional = true;
