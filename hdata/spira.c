@@ -258,6 +258,7 @@ static struct dt_node *add_xscom_node(uint64_t base, uint32_t hw_id,
 		return NULL;
 
 	dt_add_property_cells(node, "ibm,chip-id", hw_id);
+	dt_add_property_cells(node, "ibm,physical-chip-id", phys_chip_id);
 	dt_add_property_cells(node, "ibm,proc-chip-id", proc_chip_id);
 	dt_add_property_cells(node, "#address-cells", 1);
 	dt_add_property_cells(node, "#size-cells", 1);
@@ -506,7 +507,7 @@ static bool add_xscom_sppcrd(uint64_t xscom_base)
 			    SPPCRD_HDIF_SIG) {
 		const struct sppcrd_chip_info *cinfo;
 		unsigned int csize;
-		u32 ve, version;
+		u32 ve, version, hw_id, phys_hw_id;
 
 		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO, &csize);
 		if (!CHECK_SPPTR(cinfo)) {
@@ -520,17 +521,21 @@ static bool add_xscom_sppcrd(uint64_t xscom_base)
 		    ve == CHIP_VERIFY_UNUSABLE)
 			continue;
 
+		version = be16_to_cpu(hdif->version);
+
+		phys_hw_id = hw_id = be32_to_cpu(cinfo->xscom_id);
+		if (version >= 0x21)
+			hw_id = be32_to_cpu(cinfo->eff_xscom_id);
+
 		/* Create the XSCOM node */
-		np = add_xscom_node(xscom_base,
-				    be32_to_cpu(cinfo->xscom_id),
-				    be32_to_cpu(cinfo->proc_chip_id));
+		np = add_xscom_node(xscom_base, hw_id,
+				be32_to_cpu(cinfo->proc_chip_id));
 		if (!np)
 			continue;
 
+		dt_add_property_cells(np, "ibm,physical-chip-id", phys_hw_id);
 
 		dt_add_property_cells(np, DT_PRIVATE "sppcrd-index", i);
-
-		version = be16_to_cpu(hdif->version);
 
 		/* Version 0A has additional OCC related stuff */
 		if (version >= 0x000a) {
@@ -1162,8 +1167,8 @@ static void add_iplparams(void)
  */
 uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
 {
+	const struct HDIF_common_hdr *hdif;
 	unsigned int i;
-	const void *hdif;
 
 	/* First, try the proc_chip ntuples for chip data */
 	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i,
@@ -1176,8 +1181,12 @@ uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
 			prerror("XSCOM: Bad ChipID data %d\n", i);
 			continue;
 		}
-		if (proc_chip_id == be32_to_cpu(cinfo->proc_chip_id))
+
+		if (proc_chip_id == be32_to_cpu(cinfo->proc_chip_id)) {
+			if (be16_to_cpu(hdif->version))
+				return be32_to_cpu(cinfo->eff_xscom_id);
 			return be32_to_cpu(cinfo->xscom_id);
+		}
 	}
 
 	/* Otherwise, check the old-style PACA, looking for unique chips */

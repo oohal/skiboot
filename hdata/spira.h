@@ -1107,7 +1107,7 @@ struct sppcrd_chip_info {
 	__be32 pore_state;
 	__be32 xscom_id;
 	/* Version 0xA */
-	__be32 reserved;
+	__be32 eff_xscom_id; /* was reserved, replaced in 10.5d */
 	__be32 dbob_id;
 	__be32 occ_state;
 	/* Version 0xC - none of these are used */
