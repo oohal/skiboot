@@ -167,6 +167,7 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 	uint32_t size;
 	int i, count;
 
+
 	/*
 	 * This code makes a few assumptions about XSCOM addrs, etc
 	 * and will need updating for new processors
@@ -181,6 +182,7 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 	if (!ahdr || !size)
 		return -1;
 
+	return 0;
 	/*
 	 * Some hostboots don't correctly fill the version field. On these
 	 * the offset from the start of the header to the start of the array

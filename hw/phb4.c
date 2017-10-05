@@ -96,7 +96,7 @@
 
 
 #undef NO_ASB
-#undef LOG_CFG
+#define  LOG_CFG
 
 #include <skiboot.h>
 #include <io.h>
