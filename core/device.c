@@ -153,6 +153,8 @@ struct dt_node *dt_new(struct dt_node *parent, const char *name)
 		dt_destroy(new);
 		return NULL;
 	}
+
+	prerror("Added %pD to tree\n", new);
 	return new;
 }
 
@@ -1107,3 +1109,24 @@ void dt_adjust_subtree_phandle(struct dt_node *dev,
 
        set_last_phandle(max_phandle);
 }
+
+static int print_dt_node_path(char **buffer, size_t bufsize, const void *value)
+{
+	char *path = dt_get_path(value);
+	char *into = *buffer;
+	int i;
+
+	for (i = 0; path[i] && i < bufsize; i++)
+		into[i] = path[i];
+
+	*buffer += i;
+	free(path);
+
+	/* return the number of characters added to the buffer */
+	return i;
+}
+
+DECLARE_PRINTFMT(dt_node_path) = {
+	.specifier	= "D",
+	.func	 	= &print_dt_node_path,
+};
