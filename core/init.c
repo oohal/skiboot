@@ -782,6 +782,29 @@ static void pci_nvram_init(void)
 	}
 }
 
+extern struct custom_format __custom_printf_start;
+extern struct custom_format __custom_printf_end;
+
+/*
+ * Check if input string matches or is a substring of the
+ * custom specifiers.
+ *
+ * Return true is strings match / are substrings.
+ * If strings match exactly, the res pointer is set to the corresponding
+ * custom format specifier struct.
+ */
+static void dump_printfs(void)
+{
+	struct custom_format *fmt;
+
+	prerror("start of custom printf specs\n");
+	for (fmt = &__custom_printf_start; fmt < &__custom_printf_end; fmt++) {
+		prerror("Custom printf spec: %s\n", fmt->specifier);
+	}
+
+	prerror("end of customs specs\n");
+}
+
 /* Called from head.S, thus no prototype. */
 void main_cpu_entry(const void *fdt);
 
@@ -901,6 +924,8 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 	 * BMC if needed.
 	 */
 	lpc_init();
+
+	dump_printfs();
 
 	/*
 	 * Now, we init our memory map from the device-tree, and immediately

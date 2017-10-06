@@ -123,6 +123,9 @@ print_fill(char **buffer, size_t bufsize, char *sizec, unsigned long size,
 	return 0;
 }
 
+size_t mambo_console_write(const char *buf, size_t len);
+#define mwrite(buf) mambo_console_write(buf, strlen(buf))
+
 
 extern struct custom_format __custom_printf_start;
 extern struct custom_format __custom_printf_end;

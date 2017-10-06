@@ -1109,13 +1109,16 @@ void dt_adjust_subtree_phandle(struct dt_node *dev,
 
        set_last_phandle(max_phandle);
 }
-
+#include <console.h>
 static int print_dt_node_path(char **buffer, size_t bufsize, const void *value)
 {
 	char *path = dt_get_path(value);
 	char *into = *buffer;
 	int i;
-
+/*
+	mprintf("\n custom printf for dt node: bufsize = %llx, path_len = %llx, path = %s\n",
+		bufsize, strlen(path), path);
+*/
 	for (i = 0; path[i] && i < bufsize; i++)
 		into[i] = path[i];
 
