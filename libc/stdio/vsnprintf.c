@@ -124,9 +124,43 @@ print_fill(char **buffer, size_t bufsize, char *sizec, unsigned long size,
 }
 
 
+extern struct custom_format __custom_printf_start;
+extern struct custom_format __custom_printf_end;
+
+/*
+ * Check if input string matches or is a substring of the
+ * custom specifiers.
+ *
+ * Return true is strings match / are substrings.
+ * If strings match exactly, the res pointer is set to the corresponding
+ * custom format specifier struct.
+ */
+static const struct custom_format *find_custom_fmt(const char *format)
+{
+	struct custom_format *fmt;
+
+	for (fmt = &__custom_printf_start; fmt < &__custom_printf_end; fmt++) {
+		const char *spec = fmt->specifier;
+		int i = 0;
+
+		/*
+		 * we don't know how long the specifier is, so do a bytewise
+		 * compare.
+		 */
+		while (format[i] == spec[i] && format[i] && spec[i])
+			i++;
+
+		if (spec[i] == '\0')
+			return fmt;
+	}
+
+	return NULL;
+}
+
 static int
 print_format(char **buffer, size_t bufsize, const char *format, void *var)
 {
+	const struct custom_format *custom_format;
 	char *start;
 	unsigned int i = 0, length_mod = sizeof(int);
 	unsigned long value = 0;
@@ -134,7 +168,6 @@ print_format(char **buffer, size_t bufsize, const char *format, void *var)
 	char *form, sizec[32];
 	char sign = ' ';
 	bool upper = false;
-
 	form  = (char *) format;
 	start = *buffer;
 
@@ -142,6 +175,13 @@ print_format(char **buffer, size_t bufsize, const char *format, void *var)
 	if(*form == '0' || *form == '.') {
 		sign = '0';
 		form++;
+	}
+
+	/* check for custom printfs */
+	custom_format = find_custom_fmt(format);
+	if (custom_format) {
+		custom_format->func(buffer, bufsize, var);
+		return (long int) (*buffer - start);
 	}
 
 	while ((*form != '\0') && ((*buffer - start) < bufsize)) {
@@ -239,7 +279,6 @@ print_format(char **buffer, size_t bufsize, const char *format, void *var)
 	return (long int) (*buffer - start);
 }
 
-
 /*
  * The vsnprintf function prints a formatted strings into a buffer.
  * BUG: buffer size checking does not fully work yet
@@ -247,6 +286,7 @@ print_format(char **buffer, size_t bufsize, const char *format, void *var)
 int
 vsnprintf(char *buffer, size_t bufsize, const char *format, va_list arg)
 {
+	const struct custom_format *fmt;
 	char *ptr, *bstart;
 
 	bstart = buffer;
@@ -266,20 +306,43 @@ vsnprintf(char *buffer, size_t bufsize, const char *format, va_list arg)
 	{
 		if(*ptr == '%') {
 			char formstr[20];
-			int i=0;
-			
+			int i = 0;
+
 			do {
 				formstr[i] = *ptr;
 				ptr++;
 				i++;
-			} while(!(*ptr == 'd' || *ptr == 'i' || *ptr == 'u' || *ptr == 'x' || *ptr == 'X'
-						|| *ptr == 'p' || *ptr == 'c' || *ptr == 's' || *ptr == '%'
-						|| *ptr == 'O' || *ptr == 'o' )); 
+			} while(!(*ptr == 'd' || *ptr == 'i' ||
+				  *ptr == 'u' || *ptr == 'x' ||
+				  *ptr == 'X' || *ptr == 'p' ||
+				  *ptr == 's' || *ptr == '%' ||
+				  *ptr == 'O' || *ptr == 'o'));
+
+			/* Add last char to buffer*/
 			formstr[i++] = *ptr;
 			formstr[i] = '\0';
-			if(*ptr == '%') {
+
+			/*
+			 * if we terminated on a p then check if the next
+			 * few characters match one of our custom formats
+			 */
+			if (*ptr == 'p')
+				fmt = find_custom_fmt(ptr + 1);
+			else
+				fmt = NULL;
+
+			if (*ptr == '%') {
 				*buffer++ = '%';
+			} else if (fmt)  {
+				fmt->func(&buffer,
+					bufsize - (buffer - bstart),
+					va_arg(arg, void *));
+				ptr += strlen(fmt->specifier);
 			} else {
+				/*
+				 * This changes the format specifier into the
+				 * actual string.
+				 */
 				print_format(&buffer,
 					bufsize - (buffer - bstart),
 					formstr, va_arg(arg, void *));

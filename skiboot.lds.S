@@ -115,6 +115,12 @@ SECTIONS
 		__platforms_end = .;
 	}
 
+	.custom_printf : {
+		__custom_printf_start = .;
+		KEEP(*(.custom_printf))
+		__custom_printf_end = .;
+	}
+
 	/* Do I need to keep these ? */
 	.dynsym : { *(.dynsym)	}
 	.dynstr : { *(.dynstr)	}

@@ -69,4 +69,14 @@ int vsscanf(const char *str, const char *format, va_list);
 int getc(FILE *stream);
 int getchar(void);
 
+/* non-std io here */
+
+struct custom_format {
+	const char *specifier;
+	/* writes a formatted version of *value into the printf buffer */
+	int (*func) (char **buffer, size_t bufsize, const void *value);
+};
+
+#define DECLARE_PRINTFMT(name) \
+static const struct custom_format __used __section(".custom_printf") name ##_fmt
 #endif
