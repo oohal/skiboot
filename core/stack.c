@@ -31,7 +31,7 @@ extern uint32_t _stext, _etext;
 void __nomcount __backtrace(struct bt_entry *entries, unsigned int *count)
 {
 	unsigned int room = *count;
-	unsigned long *fp = __builtin_frame_address(1);
+	unsigned long *fp = __builtin_frame_address(0);
 
 	*count = 0;
 	while(room) {
