@@ -120,7 +120,8 @@ static void append_chip_id(struct dt_node *mem, u32 id)
 
 static bool add_address_range(struct dt_node *root,
 			      const struct HDIF_ms_area_id *id,
-			      const struct HDIF_ms_area_address_range *arange)
+			      const struct HDIF_ms_area_address_range *arange,
+			      bool is_nvdimm)
 {
 	struct dt_node *mem;
 	u32 chip_id;
@@ -148,8 +149,19 @@ static bool add_address_range(struct dt_node *root,
 		}
 	}
 
-	mem = dt_new_addr(root, "memory", reg[0]);
-	dt_add_property_string(mem, "device_type", "memory");
+	/*
+	 * Memory from nvdimms shouldn't go into the normal memory pool
+	 * or the contents of them will be clobbered. Put them into their
+	 * own node type.
+	 */
+	if (is_nvdimm) {
+		mem = dt_new_addr(root, "nvdimm", reg[0]);
+		dt_add_property_string(mem, "compatible", "pmem-region");
+	} else {
+		mem = dt_new_addr(root, "memory", reg[0]);
+		dt_add_property_string(mem, "device_type", "memory");
+	}
+
 	dt_add_property_cells(mem, "ibm,chip-id", chip_id);
 	dt_add_property_u64s(mem, "reg", reg[0], reg[1]);
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED)
@@ -460,6 +472,87 @@ static void add_memory_controller(const struct HDIF_common_hdr *msarea,
 	add_mca_dimm_info(mca, msarea);
 }
 
+/*
+ * Checks if all the DIMMS (RAM structures) in this interleave set (MSAREA)
+ * are backed by nvdimms. Note, that this function tries to fail-safe and
+ * will return true if any DIMM in the set is an nvdimm. We should never see
+ * interleave sets with a mix of volatile and non-volatile memory,
+ * but being paranoid good idea.
+ *
+ * In the event of missing VPD or whatever we assume the DIMM is volatile
+ * though, otherwise we may end up with the system being unusable due to
+ * bugs.
+ */
+static bool check_if_nvdimm(const struct HDIF_common_hdr *msarea)
+{
+	const struct HDIF_common_hdr *ramarea;
+	const struct HDIF_ram_area_id *ram_id;
+	const struct HDIF_child_ptr *ramptr;
+	const uint8_t *vpd, *spd;
+	unsigned int i, ram_sz, vpd_sz;
+	uint16_t spd_sz;
+
+	ramptr = HDIF_child_arr(msarea, 0);
+	if (!CHECK_SPPTR(ramptr))
+		return false;
+
+	for (i = 0; i < be32_to_cpu(ramptr->count); i++) {
+		ramarea = HDIF_child(msarea, ramptr, i, "RAM   ");
+		if (!CHECK_SPPTR(ramarea))
+			continue;
+
+		ram_id = HDIF_get_idata(ramarea, 2, &ram_sz);
+		if (!CHECK_SPPTR(ram_id))
+			continue;
+
+		/* Don't add VPD for non-existent RAM */
+		if (!(be16_to_cpu(ram_id->flags) & RAM_AREA_INSTALLED))
+			continue;
+
+		vpd = HDIF_get_idata(ramarea, 1, &vpd_sz);
+		if (!CHECK_SPPTR(vpd))
+			continue;
+
+		/*
+		 * The RAM area VPD will either be a JEDEC SPD blob or it'll be
+		 * an IBM keyword VPD blob with the SPD embedded inside of it.
+		 *
+		 * FIXME: If we're going to do this then we should have a
+		 * specific keyword to report wether the DIMM is volatile or
+		 * not.
+		 */
+		if (vpd_valid(vpd, vpd_sz)) {
+			spd = vpd_find(vpd, vpd_sz, "VSPD", "#I", &spd_sz);
+			if (!spd) {
+				prerror("RAM: Missing VPD!");
+				continue;
+			}
+		} else {
+			spd = vpd;
+		}
+
+		/* DDR3 and older should always be considered volatile */
+		if (spd[2] <= 0xB)
+			continue;
+
+		/*
+		 * For DDR4 (and above) the high bit of byte 3 indicates
+		 * the module is a "hybrid" of volatile and non-volatile
+		 * memory. In practice this just means that this is an
+		 * NVDIMM.
+		 *
+		 * XXX: We should probably do some more exhaustive tests
+		 * such as checking the function descriptors. This should
+		 * be fine though since hostboot will barf on unsupported
+		 * DIMMs before we get here.
+		 */
+		if (spd[3] & 0x80)
+			return true;
+	}
+
+	return false;
+}
+
 static void get_msareas(struct dt_node *root,
 			const struct HDIF_common_hdr *ms_vpd)
 {
@@ -480,6 +573,7 @@ static void get_msareas(struct dt_node *root,
 		const struct HDIF_ms_area_id *id;
 		const void *fruid;
 		unsigned int size, j, offset;
+		bool is_nvdimm;
 		u16 flags;
 
 		msarea = HDIF_child(ms_vpd, msptr, i, "MSAREA");
@@ -537,6 +631,8 @@ static void get_msareas(struct dt_node *root,
 		/* Add RAM Area VPD */
 		vpd_add_ram_area(msarea);
 
+		is_nvdimm = check_if_nvdimm(msarea);
+
 		/* This offset is from the arr, not the header! */
 		arange = (void *)arr + be32_to_cpu(arr->offset);
 		for (j = 0; j < be32_to_cpu(arr->ecnt); j++) {
@@ -544,7 +640,7 @@ static void get_msareas(struct dt_node *root,
 			if (be32_to_cpu(arr->eactsz) >= offset)
 				add_memory_controller(msarea, arange);
 
-			if (!add_address_range(root, id, arange))
+			if (!add_address_range(root, id, arange, is_nvdimm))
 				return;
 			arange = (void *)arange + be32_to_cpu(arr->esize);
 		}
