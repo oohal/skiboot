@@ -27,6 +27,8 @@
 #include "ibm-fsp.h"
 #include "lxvpd.h"
 
+#include "i2c.c"
+
 /* We don't yet create NPU device nodes on ZZ, but these values are correct */
 const struct platform_ocapi zz_ocapi = {
 	.i2c_engine        = 1,
@@ -51,8 +53,10 @@ static bool zz_probe(void)
 	if (dt_node_is_compatible(dt_root, "ibm,zz-1s2u") ||
 	    dt_node_is_compatible(dt_root, "ibm,zz-1s4u") ||
 	    dt_node_is_compatible(dt_root, "ibm,zz-2s2u") ||
-	    dt_node_is_compatible(dt_root, "ibm,zz-2s4u"))
+	    dt_node_is_compatible(dt_root, "ibm,zz-2s4u")) {
+		add_dimm_buses();
 		return true;
+	}
 
 	return false;
 }
