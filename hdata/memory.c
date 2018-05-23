@@ -123,13 +123,8 @@ static bool add_address_range(struct dt_node *root,
 			      const struct HDIF_ms_area_address_range *arange)
 {
 	struct dt_node *mem;
-	u64 reg[2];
-	char *name;
 	u32 chip_id;
-	size_t namesz = sizeof("memory@") + STR_MAX_CHARS(reg[0]);
-
-	name = (char*)malloc(namesz);
-	assert(name);
+	u64 reg[2];
 
 	chip_id = pcid_to_chip_id(be32_to_cpu(arange->chip));
 
@@ -143,28 +138,23 @@ static bool add_address_range(struct dt_node *root,
 	reg[0] = cleanup_addr(be64_to_cpu(arange->start));
 	reg[1] = cleanup_addr(be64_to_cpu(arange->end)) - reg[0];
 
+	/* Only enter shared nodes once */
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED) {
-		/* Only enter shared nodes once. */ 
 		mem = find_shared(root, be16_to_cpu(id->share_id),
 				  reg[0], reg[1]);
 		if (mem) {
 			append_chip_id(mem, chip_id);
-			free(name);
 			return true;
 		}
 	}
-	snprintf(name, namesz, "memory@%llx", (long long)reg[0]);
 
-	mem = dt_new(root, name);
+	mem = dt_new_addr(root, "memory", reg[0]);
 	dt_add_property_string(mem, "device_type", "memory");
 	dt_add_property_cells(mem, "ibm,chip-id", chip_id);
 	dt_add_property_u64s(mem, "reg", reg[0], reg[1]);
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED)
 		dt_add_property_cells(mem, DT_PRIVATE "share-id",
 				      be16_to_cpu(id->share_id));
-
-	free(name);
-
 	return true;
 }
 
