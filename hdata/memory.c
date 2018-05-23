@@ -80,7 +80,7 @@ static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 
 		if (!type || strcmp(type->prop, "memory") != 0)
 			continue;
 
-		shared = dt_find_property(i, DT_PRIVATE "share-id");
+		shared = dt_find_property(i, "share-id");
 		if (!shared || fdt32_to_cpu(*(u32 *)shared->prop) != id)
 			continue;
 
@@ -129,7 +129,7 @@ static bool add_address_range(struct dt_node *root,
 
 	chip_id = pcid_to_chip_id(be32_to_cpu(arange->chip));
 
-	prlog(PR_DEBUG, "  Range: 0x%016llx..0x%016llx "
+	prlog(PR_ERR, "  Range: 0x%016llx..0x%016llx "
 	      "on Chip 0x%x mattr: 0x%x\n",
 	      (long long)be64_to_cpu(arange->start),
 	      (long long)be64_to_cpu(arange->end),
@@ -165,8 +165,9 @@ static bool add_address_range(struct dt_node *root,
 	dt_add_property_cells(mem, "ibm,chip-id", chip_id);
 	dt_add_property_u64s(mem, "reg", reg[0], reg[1]);
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED)
-		dt_add_property_cells(mem, DT_PRIVATE "share-id",
+		dt_add_property_cells(mem, "share-id",
 				      be16_to_cpu(id->share_id));
+
 	return true;
 }
 
@@ -632,6 +633,7 @@ static void get_msareas(struct dt_node *root,
 		vpd_add_ram_area(msarea);
 
 		is_nvdimm = check_if_nvdimm(msarea);
+		prerror("MS VPD: %u is a %s\n", i, is_nvdimm ? "NVDIMM" : "DIMM");
 
 		/* This offset is from the arr, not the header! */
 		arange = (void *)arr + be32_to_cpu(arr->offset);
