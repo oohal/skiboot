@@ -286,7 +286,7 @@ void lxvpd_process_slot_entries(struct phb *phb,
 	size_t lxvpd_size, pr_size;
 	const uint16_t *mf = NULL;
 	char record[5] = "PR00";
-	uint8_t mf_sz, sm_sz;
+	uint16_t mf_sz, sm_sz;
 	bool found = false;
 
 	record[2] += chip_id;

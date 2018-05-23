@@ -272,7 +272,7 @@ static void vpd_opfr_parse(struct dt_node *node,
 		const void *fruvpd, unsigned int fruvpd_sz)
 {
 	const void *kw;
-	uint8_t sz;
+	uint16_t sz;
 
 	/* Vendor Name */
 	kw = vpd_find(fruvpd, fruvpd_sz, "OPFR", "VN", &sz);
@@ -309,7 +309,7 @@ static void vpd_vrml_parse(struct dt_node *node,
 		const void *fruvpd, unsigned int fruvpd_sz)
 {
 	const void *kw;
-	uint8_t sz;
+	uint16_t sz;
 
 	/* Part number */
 	kw = vpd_find(fruvpd, fruvpd_sz, "VRML", "PN", &sz);
@@ -328,7 +328,7 @@ static void vpd_vini_parse(struct dt_node *node,
 			   const void *fruvpd, unsigned int fruvpd_sz)
 {
 	const void *kw;
-	uint8_t sz;
+	uint16_t sz;
 	const struct card_info *cinfo;
 
 	/* FRU Stocking Part Number */
@@ -586,7 +586,7 @@ def_model:
 static void sysvpd_parse_opp(const void *sysvpd, unsigned int sysvpd_sz)
 {
 	const char *v;
-	uint8_t sz;
+	uint16_t sz;
 
 	v = vpd_find(sysvpd, sysvpd_sz, "OSYS", "MM", &sz);
 	if (v)
@@ -607,7 +607,7 @@ static void sysvpd_parse_legacy(const void *sysvpd, unsigned int sysvpd_sz)
 	const char *model;
 	const char *system_id;
 	const char *brand;
-	uint8_t sz;
+	uint16_t sz;
 
 	model = vpd_find(sysvpd, sysvpd_sz, "VSYS", "TM", &sz);
 	if (model)

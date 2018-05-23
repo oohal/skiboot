@@ -27,14 +27,21 @@
  * when having multiple MF/SM keyword pairs
  */
 const void *vpd_find_keyword(const void *rec, size_t rec_sz,
-			     const char *kw, uint8_t *kw_size)
+			     const char *kw, uint16_t *kw_size)
 {
 	const uint8_t *p = rec, *end = rec + rec_sz;
 
 	while (CHECK_SPACE(p, 3, end)) {
 		uint8_t k1 = *(p++);
 		uint8_t k2 = *(p++);
-		uint8_t sz = *(p++);
+		uint16_t sz = *(p++);
+
+		/* keywords starting with # have a 16 bit size */
+		if (k1 == '#') {
+			sz |= *(p++) << 8;
+			if (p == end)
+				break;
+		}
 
 		if (k1 == kw[0] && k2 == kw[1]) {
 			if (kw_size)
@@ -87,7 +94,7 @@ const void *vpd_find_record(const void *vpd, size_t vpd_size,
 	const uint8_t *p = vpd, *end = vpd + vpd_size;
 	bool first_start = true;
 	size_t rec_sz;
-	uint8_t namesz = 0;
+	uint16_t namesz = 0;
 	const char *rec_name;
 
 	if (!vpd)
@@ -137,7 +144,7 @@ const void *vpd_find_record(const void *vpd, size_t vpd_size,
  */
 const void *vpd_find(const void *vpd, size_t vpd_size,
 		     const char *record, const char *keyword,
-		     uint8_t *sz)
+		     uint16_t *sz)
 {
 	size_t rec_sz;
 	const uint8_t *p;
@@ -206,7 +213,7 @@ void vpd_iohub_load(struct dt_node *hub_node)
 {
 	char record[4] = "LXR0";
 	const void *valid_lx;
-	uint8_t lx_size;
+	uint16_t lx_size;
 	int r;
 	const uint32_t *p;
 	const uint8_t *lx;
