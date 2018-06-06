@@ -215,46 +215,31 @@ static int64_t pcie_slot_set_power_state_ext(struct pci_slot *slot, uint8_t val,
 		return OPAL_SUCCESS;
 	}
 
-	/* The power supply to the slot should be always on when surprise
-	 * hotplug is claimed. For this case, update with the requested
-	 * power state and bail immediately.
+	slot->power_state = val;
+
+	/*
+	 * To support platforms without presence detect we keep the slot power
+	 * supply active on suprise hotplug slots by no-op`ing the power-down
+	 * case. For the power-up case we always switch the slot power on since
+	 * idiots like me might have been poking at config space directly.
 	 *
-	 * The PCIe link is likely down if we're powering on the slot upon
-	 * the detected presence. Nothing behind the slot will be probed if
-	 * we do it immediately even we do have PCI devices connected to the
-	 * slot. For this case, we force upper layer to wait for the PCIe
-	 * link to be up before probing the PCI devices behind the slot. It's
-	 * only concerned in surprise hotplug path. In managed hot-add path,
-	 * the PCIe link should have been ready before we power on the slot.
-	 * However, it's not harmful to do so in managed hot-add path.
-	 *
-	 * When flag PCI_SLOT_FLAG_FORCE_POWERON is set for the PCI slot, we
-	 * should turn on the slot's power supply on hardware on user's request
-	 * because that might have been lost. Otherwise, the PCIe link behind
-	 * the slot won't become ready for ever and PCI adapter behind the slot
-	 * can't be probed successfully.
+	 * XXX: We might want to clear the power indicator anyway since there's
+	 * nothing in the slot.
 	 */
-	if (surprise_check && slot->surprise_pluggable) {
-		slot->power_state = val;
+	if (surprise_check && slot->surprise_pluggable)
 		if (val == PCI_SLOT_POWER_OFF)
 			return OPAL_SUCCESS;
 
-		if (!pci_slot_has_flags(slot, PCI_SLOT_FLAG_FORCE_POWERON)) {
-			pci_slot_set_state(slot, PCI_SLOT_STATE_SPOWER_DONE);
-			return OPAL_ASYNC_COMPLETION;
-		}
-	}
-
-	pci_slot_set_state(slot, PCI_SLOT_STATE_SPOWER_START);
-	slot->power_state = val;
 	ecap = pci_cap(pd, PCI_CFG_CAP_ID_EXP, false);
 	pci_cfg_read16(phb, pd->bdfn, ecap + PCICAP_EXP_SLOTCTL, &state);
 	state &= ~(PCICAP_EXP_SLOTCTL_PWRCTLR | PCICAP_EXP_SLOTCTL_PWRI);
+
 	switch (val) {
 	case PCI_SLOT_POWER_OFF:
 		state |= (PCICAP_EXP_SLOTCTL_PWRCTLR | (PCIE_INDIC_OFF << 8));
 		break;
 	case PCI_SLOT_POWER_ON:
+		/* NB: slot power is on when PWRCTLR = 0 */
 		state |= (PCIE_INDIC_ON << 8);
 		break;
 	default:
