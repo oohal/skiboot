@@ -21,6 +21,8 @@
 #include <ipmi.h>
 #include <psi.h>
 #include <npu-regs.h>
+#include <pci.h>
+#include <pci-cfg.h>
 
 #include "astbmc.h"
 
@@ -50,31 +52,28 @@ static const struct slot_table_entry hdd_bay_slots[] = {
 	{ .etype = st_end },
 };
 
-/* 9797 upstream, for some reason both virtual switches are on "port 0" */
-const struct slot_table_entry hdd_upstream[] = {
-	SW_PLUGGABLE("9797 Upstream", 0x0, .children = hdd_bay_slots),
-	{ .etype = st_end },
-};
+static void zaius_get_slot_info(struct phb *phb, struct pci_device *pd)
+{
+	const struct slot_table_entry *ent = NULL;
 
-/* Switch card */
-const struct slot_table_entry sw_downstream[] = {
-	SW_PLUGGABLE("Port 0", 0x6, .children = hdd_upstream),
-	SW_PLUGGABLE("Port 1", 0x7, .children = hdd_upstream),
-	SW_PLUGGABLE("Port 2", 0x4),
-	SW_PLUGGABLE("Port 3", 0x5),
-	{ .etype = st_end },
-};
+	if (!pd || pd->slot)
+		return;
 
-const struct slot_table_entry sw_upstream[] = {
-	SW_PLUGGABLE("upstream", 0x0, .children = sw_downstream),
-	{ .etype = st_end },
-};
-
-/* root complex */
-const struct slot_table_entry pe4_rc[] = { /* root complex slot */
-	SW_PLUGGABLE("PE4", 0x0, .children = sw_upstream),
-	{ .etype = st_end },
-};
+	/*
+	 * If we find a 9797 switch then assume it's the HDD Rack. This might
+	 * break if we have another 9797 in the system for some reason. This is
+	 * a really dumb hack, but until we get query the BMC about wether we
+	 * have a HDD rack or not we don't have much of a choice.
+	 */
+	if (pd->dev_type == PCIE_TYPE_SWITCH_DNPORT && pd->vdid == 0x979710b5)
+		for (ent = hdd_bay_slots; ent->etype != st_end; ent++)
+			if (ent->location == (pd->bdfn & 0xff))
+				break;
+	if (ent)
+		slot_table_add_slot_info(pd, ent);
+	else
+		slot_table_get_slot_info(phb, pd);
+}
 
 const struct platform_ocapi zaius_ocapi = {
 	.i2c_engine        = 1,
@@ -87,6 +86,9 @@ const struct platform_ocapi zaius_ocapi = {
 	.i2c_presence_odl1 = (1 << 7), /* top connector */
 	.odl_phy_swap      = true,
 };
+
+
+ST_PLUGGABLE(pe4_rc, "PE4");
 
 static const struct slot_table_entry zaius_phb_table[] = {
 /*
@@ -216,7 +218,7 @@ DECLARE_PLATFORM(zaius) = {
 	.start_preload_resource	= flash_start_preload_resource,
 	.resource_loaded	= flash_resource_loaded,
 	.bmc			= NULL, /* FIXME: Add openBMC */
-	.pci_get_slot_info	= slot_table_get_slot_info,
+	.pci_get_slot_info	= zaius_get_slot_info,
 	.pci_probe_complete	= check_all_slot_table,
 	.cec_power_down         = astbmc_ipmi_power_down,
 	.cec_reboot             = astbmc_ipmi_reboot,
