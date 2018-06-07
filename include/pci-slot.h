@@ -145,9 +145,25 @@ struct pci_slot_ops {
 
 struct pci_slot {
 	uint32_t		flags;
+/*
+ * The boot up flag indicates that we're in initial boot. Important since some
+ * slot backends need to wait around for I2C requests, etc.
+ */
 #define PCI_SLOT_FLAG_BOOTUP		0x1
+
+/*
+ * Indicates that the slot power is always on.
+ */
 #define PCI_SLOT_FLAG_FORCE_POWERON	0x2
+
+/*
+ * Indicates that the presence-detect-change bit is invalid.
+ */
 #define PCI_SLOT_FLAG_BROKEN_PDC	0x4
+
+/*
+ * Forces slot power control operations to occur.
+ */
 #define PCI_SLOT_FLAG_ENFORCE		0x8
 
 	struct phb		*phb;
