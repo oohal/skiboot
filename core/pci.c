@@ -454,8 +454,8 @@ error:
 static bool pci_bridge_power_on(struct phb *phb, struct pci_device *pd)
 {
 	int32_t ecap;
-	uint16_t pcie_cap, slot_sts, slot_ctl, link_ctl;
-	uint32_t slot_cap;
+	uint16_t pcie_cap, slot_sts, slot_ctl, link_ctl, link_sts;
+	uint32_t slot_cap, link_cap;
 	int64_t rc;
 
 	/*
@@ -484,11 +484,29 @@ static bool pci_bridge_power_on(struct phb *phb, struct pci_device *pd)
 		return true;
 	}
 
+	/*
+	 * In this case we don't have a platform defined slot for this bridge.
+	 * This can happen for things like built-in devices, or for plug-in
+	 * cards that contain a PCIe switch (think NVMe expanders).
+	 */
+
 	if (!pci_has_cap(pd, PCI_CFG_CAP_ID_EXP, false))
 		return true;
-
-	/* Check if slot is supported */
 	ecap = pci_cap(pd, PCI_CFG_CAP_ID_EXP, false);
+
+	/*
+	 * Check if the link is already up before we start poking at the slot
+	 * control stuff.
+	 */
+	pci_cfg_read32(phb, pd->bdfn, ecap + PCICAP_EXP_LCAP, &link_cap);
+	pci_cfg_read16(phb, pd->bdfn, ecap + PCICAP_EXP_LSTAT, &link_sts);
+	if ((link_cap & PCICAP_EXP_LCAP_DL_ACT_REP) &&
+	    (link_sts & PCICAP_EXP_LSTAT_DLLL_ACT))
+		return true;
+
+	/*
+	 * Oh well, do it the long way...
+	 */
 	pci_cfg_read16(phb, pd->bdfn,
 		       ecap + PCICAP_EXP_CAPABILITY_REG, &pcie_cap);
 	if (!(pcie_cap & PCICAP_EXP_CAP_SLOT))
@@ -596,44 +614,13 @@ static bool pci_enable_bridge(struct phb *phb, struct pci_device *pd)
 	bctl &= ~PCI_CFG_BRCTL_MABORT_REPORT;
 	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_BRCTL, bctl);
 
-
-	/* PCI-E bridge, check the slot state. We don't do that on the
+	/*
+	 * PCI-E bridge, check the slot state. We don't do that on the
 	 * root complex as this is handled separately and not all our
 	 * RCs implement the standard register set.
 	 */
 	if ((pd->dev_type == PCIE_TYPE_ROOT_PORT && pd->primary_bus > 0) ||
 	    pd->dev_type == PCIE_TYPE_SWITCH_DNPORT) {
-		if (pci_has_cap(pd, PCI_CFG_CAP_ID_EXP, false)) {
-			int32_t ecap;
-			uint32_t link_cap = 0;
-			uint16_t link_sts = 0;
-
-			ecap = pci_cap(pd, PCI_CFG_CAP_ID_EXP, false);
-			pci_cfg_read32(phb, pd->bdfn,
-				       ecap + PCICAP_EXP_LCAP, &link_cap);
-
-			/*
-			 * No need to touch the power supply if the PCIe link has
-			 * been up. Further more, the slot presence bit is lost while
-			 * the PCIe link is up on the specific PCI topology. In that
-			 * case, we need ignore the slot presence bit and go ahead for
-			 * probing. Otherwise, the NVMe adapter won't be probed.
-			 *
-			 * PHB3 root port, PLX switch 8748 (10b5:8748), PLX swich 9733
-			 * (10b5:9733), PMC 8546 swtich (11f8:8546), NVMe adapter
-			 * (1c58:0023).
-			 */
-			ecap = pci_cap(pd, PCI_CFG_CAP_ID_EXP, false);
-			pci_cfg_read32(phb, pd->bdfn,
-				       ecap + PCICAP_EXP_LCAP, &link_cap);
-			pci_cfg_read16(phb, pd->bdfn,
-				       ecap + PCICAP_EXP_LSTAT, &link_sts);
-			if ((link_cap & PCICAP_EXP_LCAP_DL_ACT_REP) &&
-			    (link_sts & PCICAP_EXP_LSTAT_DLLL_ACT))
-				return true;
-		}
-
-		/* Power on the downstream slot or link */
 		if (!pci_bridge_power_on(phb, pd))
 			return false;
 	}
