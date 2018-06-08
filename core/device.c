@@ -98,7 +98,7 @@ int dt_cmp_subnodes(const struct dt_node *a, const struct dt_node *b)
 
 	return strcmp(a->name, b->name);
 }
-
+#include <stack.h>
 bool dt_attach_root(struct dt_node *parent, struct dt_node *root)
 {
 	struct dt_node *node;
@@ -119,6 +119,7 @@ bool dt_attach_root(struct dt_node *parent, struct dt_node *root)
 		if (cmp == 0) {
 			prerror("DT: %s failed, duplicate %s\n",
 				__func__, root->name);
+			backtrace();
 			return false;
 		}
 
