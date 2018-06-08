@@ -207,15 +207,11 @@ static int64_t pcie_slot_set_power_state_ext(struct pci_slot *slot, uint8_t val,
 	if (slot->power_state == val)
 		return OPAL_SUCCESS;
 
-	/* Update the power state and return immediately if the power
-	 * control functionality isn't supported on the PCI slot.
-	 */
-	if (!(slot->slot_cap & PCICAP_EXP_SLOTCAP_PWCTRL)) {
-		slot->power_state = val;
-		return OPAL_SUCCESS;
-	}
-
 	slot->power_state = val;
+
+	/* No power control so there's nothing to do. */
+	if (!(slot->slot_cap & PCICAP_EXP_SLOTCAP_PWCTRL))
+		return OPAL_SUCCESS;
 
 	/*
 	 * To support platforms without presence detect we keep the slot power
