@@ -204,6 +204,10 @@ static int64_t pcie_slot_set_power_state_ext(struct pci_slot *slot, uint8_t val,
 	uint32_t ecap;
 	uint16_t state;
 
+	prlog(PR_DEBUG, "PHB#%04x:%02x:%02x.%1x: setting power state to %x\n",
+		slot->phb->opal_id, slot->pd->bdfn >> 8,
+		(slot->pd->bdfn >> 3) & 0x1f, slot->pd->bdfn & 0x7, val);
+
 	if (slot->power_state == val)
 		return OPAL_SUCCESS;
 
