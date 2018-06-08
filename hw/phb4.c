@@ -1979,38 +1979,62 @@ static void phb4_eeh_dump_regs(struct phb4 *p)
 	PHBERR(p, "                  lemFir = %016llx\n", s->lemFir);
 	PHBERR(p, "            lemErrorMask = %016llx\n", s->lemErrorMask);
 	PHBERR(p, "                  lemWOF = %016llx\n", s->lemWOF);
-	PHBERR(p, "          phbErrorStatus = %016llx\n", s->phbErrorStatus);
-	PHBERR(p, "     phbFirstErrorStatus = %016llx\n", s->phbFirstErrorStatus);
-	PHBERR(p, "            phbErrorLog0 = %016llx\n", s->phbErrorLog0);
-	PHBERR(p, "            phbErrorLog1 = %016llx\n", s->phbErrorLog1);
-	PHBERR(p, "       phbTxeErrorStatus = %016llx\n", s->phbTxeErrorStatus);
-	PHBERR(p, "  phbTxeFirstErrorStatus = %016llx\n", s->phbTxeFirstErrorStatus);
-	PHBERR(p, "         phbTxeErrorLog0 = %016llx\n", s->phbTxeErrorLog0);
-	PHBERR(p, "         phbTxeErrorLog1 = %016llx\n", s->phbTxeErrorLog1);
-	PHBERR(p, "    phbRxeArbErrorStatus = %016llx\n", s->phbRxeArbErrorStatus);
-	PHBERR(p, "phbRxeArbFrstErrorStatus = %016llx\n", s->phbRxeArbFirstErrorStatus);
-	PHBERR(p, "      phbRxeArbErrorLog0 = %016llx\n", s->phbRxeArbErrorLog0);
-	PHBERR(p, "      phbRxeArbErrorLog1 = %016llx\n", s->phbRxeArbErrorLog1);
-	PHBERR(p, "    phbRxeMrgErrorStatus = %016llx\n", s->phbRxeMrgErrorStatus);
-	PHBERR(p, "phbRxeMrgFrstErrorStatus = %016llx\n", s->phbRxeMrgFirstErrorStatus);
-	PHBERR(p, "      phbRxeMrgErrorLog0 = %016llx\n", s->phbRxeMrgErrorLog0);
-	PHBERR(p, "      phbRxeMrgErrorLog1 = %016llx\n", s->phbRxeMrgErrorLog1);
-	PHBERR(p, "    phbRxeTceErrorStatus = %016llx\n", s->phbRxeTceErrorStatus);
-	PHBERR(p, "phbRxeTceFrstErrorStatus = %016llx\n", s->phbRxeTceFirstErrorStatus);
-	PHBERR(p, "      phbRxeTceErrorLog0 = %016llx\n", s->phbRxeTceErrorLog0);
-	PHBERR(p, "      phbRxeTceErrorLog1 = %016llx\n", s->phbRxeTceErrorLog1);
-	PHBERR(p, "       phbPblErrorStatus = %016llx\n", s->phbPblErrorStatus);
-	PHBERR(p, "  phbPblFirstErrorStatus = %016llx\n", s->phbPblFirstErrorStatus);
-	PHBERR(p, "         phbPblErrorLog0 = %016llx\n", s->phbPblErrorLog0);
-	PHBERR(p, "         phbPblErrorLog1 = %016llx\n", s->phbPblErrorLog1);
-	PHBERR(p, "     phbPcieDlpErrorLog1 = %016llx\n", s->phbPcieDlpErrorLog1);
-	PHBERR(p, "     phbPcieDlpErrorLog2 = %016llx\n", s->phbPcieDlpErrorLog2);
-	PHBERR(p, "   phbPcieDlpErrorStatus = %016llx\n", s->phbPcieDlpErrorStatus);
 
-	PHBERR(p, "      phbRegbErrorStatus = %016llx\n", s->phbRegbErrorStatus);
-	PHBERR(p, " phbRegbFirstErrorStatus = %016llx\n", s->phbRegbFirstErrorStatus);
-	PHBERR(p, "        phbRegbErrorLog0 = %016llx\n", s->phbRegbErrorLog0);
-	PHBERR(p, "        phbRegbErrorLog1 = %016llx\n", s->phbRegbErrorLog1);
+	/* Only dump the detailed regs if the error reg is non-zero */
+	if (s->phbErrorStatus) {
+		PHBERR(p, "          phbErrorStatus = %016llx\n", s->phbErrorStatus);
+		PHBERR(p, "     phbFirstErrorStatus = %016llx\n", s->phbFirstErrorStatus);
+		PHBERR(p, "            phbErrorLog0 = %016llx\n", s->phbErrorLog0);
+		PHBERR(p, "            phbErrorLog1 = %016llx\n", s->phbErrorLog1);
+	}
+
+	if (!s->phbTxeErrorStatus) {
+		PHBERR(p, "       phbTxeErrorStatus = %016llx\n", s->phbTxeErrorStatus);
+		PHBERR(p, "  phbTxeFirstErrorStatus = %016llx\n", s->phbTxeFirstErrorStatus);
+		PHBERR(p, "         phbTxeErrorLog0 = %016llx\n", s->phbTxeErrorLog0);
+		PHBERR(p, "         phbTxeErrorLog1 = %016llx\n", s->phbTxeErrorLog1);
+	}
+
+	if (!s->phbRxeArbErrorStatus) {
+		PHBERR(p, "    phbRxeArbErrorStatus = %016llx\n", s->phbRxeArbErrorStatus);
+		PHBERR(p, "phbRxeArbFrstErrorStatus = %016llx\n", s->phbRxeArbFirstErrorStatus);
+		PHBERR(p, "      phbRxeArbErrorLog0 = %016llx\n", s->phbRxeArbErrorLog0);
+		PHBERR(p, "      phbRxeArbErrorLog1 = %016llx\n", s->phbRxeArbErrorLog1);
+	}
+
+	if (!s->phbRxeMrgErrorStatus) {
+		PHBERR(p, "    phbRxeMrgErrorStatus = %016llx\n", s->phbRxeMrgErrorStatus);
+		PHBERR(p, "phbRxeMrgFrstErrorStatus = %016llx\n", s->phbRxeMrgFirstErrorStatus);
+		PHBERR(p, "      phbRxeMrgErrorLog0 = %016llx\n", s->phbRxeMrgErrorLog0);
+		PHBERR(p, "      phbRxeMrgErrorLog1 = %016llx\n", s->phbRxeMrgErrorLog1);
+	}
+
+	if (!s->phbRxeTceErrorStatus) {
+		PHBERR(p, "    phbRxeTceErrorStatus = %016llx\n", s->phbRxeTceErrorStatus);
+		PHBERR(p, "phbRxeTceFrstErrorStatus = %016llx\n", s->phbRxeTceFirstErrorStatus);
+		PHBERR(p, "      phbRxeTceErrorLog0 = %016llx\n", s->phbRxeTceErrorLog0);
+		PHBERR(p, "      phbRxeTceErrorLog1 = %016llx\n", s->phbRxeTceErrorLog1);
+	}
+
+	if (!s->phbPblErrorStatus) {
+		PHBERR(p, "       phbPblErrorStatus = %016llx\n", s->phbPblErrorStatus);
+		PHBERR(p, "  phbPblFirstErrorStatus = %016llx\n", s->phbPblFirstErrorStatus);
+		PHBERR(p, "         phbPblErrorLog0 = %016llx\n", s->phbPblErrorLog0);
+		PHBERR(p, "         phbPblErrorLog1 = %016llx\n", s->phbPblErrorLog1);
+	}
+
+	if (!s->phbPcieDlpErrorStatus) {
+		PHBERR(p, "   phbPcieDlpErrorStatus = %016llx\n", s->phbPcieDlpErrorStatus);
+		PHBERR(p, "     phbPcieDlpErrorLog1 = %016llx\n", s->phbPcieDlpErrorLog1);
+		PHBERR(p, "     phbPcieDlpErrorLog2 = %016llx\n", s->phbPcieDlpErrorLog2);
+	}
+
+	if (!s->phbRegbErrorStatus) {
+		PHBERR(p, "      phbRegbErrorStatus = %016llx\n", s->phbRegbErrorStatus);
+		PHBERR(p, " phbRegbFirstErrorStatus = %016llx\n", s->phbRegbFirstErrorStatus);
+		PHBERR(p, "        phbRegbErrorLog0 = %016llx\n", s->phbRegbErrorLog0);
+		PHBERR(p, "        phbRegbErrorLog1 = %016llx\n", s->phbRegbErrorLog1);
+	}
 
 	for (i = 0; i < OPAL_PHB4_NUM_PEST_REGS; i++) {
 		if (!s->pestA[i] && !s->pestB[i])
