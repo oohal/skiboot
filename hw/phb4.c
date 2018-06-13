@@ -2042,6 +2042,9 @@ static void phb4_eeh_dump_regs(struct phb4 *p)
 		PHBERR(p, "               PEST[%03d] = %016llx %016llx\n",
 		       i, s->pestA[i], s->pestB[i]);
 	}
+
+	backtrace();
+
 	free(s);
 }
 
