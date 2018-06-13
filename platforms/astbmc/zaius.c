@@ -24,6 +24,58 @@
 
 #include "astbmc.h"
 
+/* backplane slots */
+static const struct slot_table_entry hdd_bay_slots[] = {
+	SW_PLUGGABLE("hdd0", 0xe),
+	SW_PLUGGABLE("hdd1", 0x4),
+	SW_PLUGGABLE("hdd2", 0x5),
+	SW_PLUGGABLE("hdd3", 0x6),
+	SW_PLUGGABLE("hdd4", 0x7),
+	SW_PLUGGABLE("hdd5", 0xf),
+	SW_PLUGGABLE("hdd6", 0xc),
+	SW_PLUGGABLE("hdd7", 0xd),
+	SW_PLUGGABLE("hdd8", 0x14),
+	SW_PLUGGABLE("hdd9", 0x17),
+	SW_PLUGGABLE("hdd10", 0x8),
+	SW_PLUGGABLE("hdd11", 0xb),
+	SW_PLUGGABLE("hdd12", 0x10),
+	SW_PLUGGABLE("hdd13", 0x13),
+	SW_PLUGGABLE("hdd14", 0x16),
+	SW_PLUGGABLE("hdd15", 0x09),
+	SW_PLUGGABLE("hdd16", 0xa),
+	SW_PLUGGABLE("hdd17", 0x11),
+	SW_PLUGGABLE("hdd18", 0x12),
+	SW_PLUGGABLE("hdd19", 0x15),
+
+	{ .etype = st_end },
+};
+
+/* 9797 upstream, for some reason both virtual switches are on "port 0" */
+const struct slot_table_entry hdd_upstream[] = {
+	SW_PLUGGABLE("9797 Upstream", 0x0, .children = hdd_bay_slots),
+	{ .etype = st_end },
+};
+
+/* Switch card */
+const struct slot_table_entry sw_downstream[] = {
+	SW_PLUGGABLE("Port 0", 0x6, .children = hdd_upstream),
+	SW_PLUGGABLE("Port 1", 0x7, .children = hdd_upstream),
+	SW_PLUGGABLE("Port 2", 0x4),
+	SW_PLUGGABLE("Port 3", 0x5),
+	{ .etype = st_end },
+};
+
+const struct slot_table_entry sw_upstream[] = {
+	SW_PLUGGABLE("upstream", 0x0, .children = sw_downstream),
+	{ .etype = st_end },
+};
+
+/* root complex */
+const struct slot_table_entry pe4_rc[] = { /* root complex slot */
+	SW_PLUGGABLE("PE4", 0x0, .children = sw_upstream),
+	{ .etype = st_end },
+};
+
 const struct platform_ocapi zaius_ocapi = {
 	.i2c_engine        = 1,
 	.i2c_port          = 4,
@@ -34,6 +86,24 @@ const struct platform_ocapi zaius_ocapi = {
 	.i2c_presence_odl0 = (1 << 2), /* bottom connector */
 	.i2c_presence_odl1 = (1 << 7), /* top connector */
 	.odl_phy_swap      = true,
+};
+
+static const struct slot_table_entry zaius_phb_table[] = {
+/*
+	ST_PHB_ENTRY(0, 0, romulus_cpu1_slot2),
+	ST_PHB_ENTRY(0, 1, romulus_cpu1_slot1),
+
+	ST_PHB_ENTRY(0, 2, romulus_builtin_raid),
+	ST_PHB_ENTRY(0, 3, romulus_builtin_usb),
+	ST_PHB_ENTRY(0, 4, romulus_builtin_ethernet),
+	ST_PHB_ENTRY(0, 5, romulus_builtin_bmc),
+*/
+	ST_PHB_ENTRY(8, 0, pe4_rc), // might be swapped with 3
+/*
+	ST_PHB_ENTRY(8, 1, romulus_cpu2_slot3), // might be PHB1 or 2
+	ST_PHB_ENTRY(8, 3, romulus_cpu2_slot1),
+*/
+	{ .etype = st_end },
 };
 
 #define NPU_BASE 0x5011000
@@ -133,6 +203,8 @@ static bool zaius_probe(void)
 
 	zaius_create_npu();
 	zaius_create_ocapi_i2c_bus();
+
+	slot_table_init(zaius_phb_table);
 
 	return true;
 }
