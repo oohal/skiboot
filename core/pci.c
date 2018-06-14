@@ -557,6 +557,7 @@ static bool pci_bridge_wait_link(struct phb *phb,
 	int32_t ecap = 0;
 	uint32_t link_cap = 0, retries = 100;
 	uint16_t link_sts;
+	bool up, prev_up;
 
 	if (pci_has_cap(pd, PCI_CFG_CAP_ID_EXP, false)) {
 		ecap = pci_cap(pd, PCI_CFG_CAP_ID_EXP, false);
@@ -579,25 +580,37 @@ static bool pci_bridge_wait_link(struct phb *phb,
 	 * come up until timeout.
 	 */
 	PCIDBG(phb, pd->bdfn, "waiting for link... \n");
+
+	/*
+	 * After the link is up we need to wait for 100ms before
+	 * touching config space. We also need to deal with devices
+	 * that flap the link on power on so we only consider the
+	 * link "up" once we've seen it active for two polls, 100ms
+	 * apart.
+	 */
+	prev_up = up = false;
+
 	while (retries--) {
 		pci_cfg_read16(phb, pd->bdfn,
 			       ecap + PCICAP_EXP_LSTAT, &link_sts);
-		if (link_sts & PCICAP_EXP_LSTAT_DLLL_ACT)
-			break;
 
+		up = !!(link_sts & PCICAP_EXP_LSTAT_DLLL_ACT);
+		if (up && prev_up)
+			break;
+		prev_up = up;
+
+		if (!retries)
+			break;
 		time_wait_ms(100);
 	}
 
-	if (!(link_sts & PCICAP_EXP_LSTAT_DLLL_ACT)) {
-		PCIERR(phb, pd->bdfn, "Timeout waiting for downstream link\n");
-		return false;
+	if (up && prev_up) {
+		PCIDBG(phb, pd->bdfn, "link is up\n");
+		return true;
 	}
 
-	/* Need another 100ms before touching the config space */
-	time_wait_ms(100);
-	PCIDBG(phb, pd->bdfn, "link is up\n");
-
-	return true;
+	PCIERR(phb, pd->bdfn, "Timeout waiting for downstream link\n");
+	return false;
 }
 
 /* pci_enable_bridge - Called before scanning a bridge
