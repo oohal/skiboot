@@ -1462,7 +1462,7 @@ void create_pmem_regions(void)
 
 		if (*opt == '@') {
 			opt++;
-			chip_id = strtol(opt, (char **)&opt, 10);
+			chip_id = strtol(opt, (char **)&opt, 16);
 		}
 
 		prerror("opt3 = '%c'\n", *opt);
