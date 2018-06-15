@@ -1436,10 +1436,11 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 }
 
 #define PMEM_REGION_SIZE (64 * 1024 * 1024)
+#include <nvram.h>
 
 void create_pmem_regions(void)
 {
-	const char *opt = "64M@0,32M@0"; //nvram_query("pmem");
+	const char *opt = nvram_query("pmem");
 	uint64_t size;
 
 	if (!opt)
