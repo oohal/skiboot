@@ -1355,6 +1355,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 	struct mem_region *r, *pmem = NULL; //*last;
 	const struct dt_property *p;
 	struct dt_node *n;
+	uint64_t split_at;
 
 	lock(&mem_region_lock);
 
@@ -1374,12 +1375,24 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 			continue;
 
 		/*
+		 * We need to be aligned to 16MB at the very least, but
+		 * align larger regions to 1GB to ensure we can use 1GB
+		 * pages. This will waste a little bit of space, but eh
+		 */
+
+		split_at = r->start + r->len - size;
+
+		if (size > (1 << 30))
+			split_at &= ~((1 << 30) - 1);
+		else
+			split_at &= ~((1 << 24) - 1);
+
+		/*
 		 * Split the region and mark it as a hardware reserved range.
 		 * For HW reserves the reserved-memory node has the 'no-map'
 		 * property so the OS will ignore it completely.
 		 */
-		pmem = split_region(r, r->start + r->len - size,
-					REGION_RESERVED);
+		pmem = split_region(r, split_at, REGION_RESERVED);
 
 		if (!pmem) {
 			prerror("Unable to split pmem region from '%s'\n",
