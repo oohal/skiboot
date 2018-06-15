@@ -1413,9 +1413,33 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 			continue;
 		}
 
-		n = dt_new_addr(dt_root, "pmem", pmem->start);
-		dt_add_property_u64s(n, "reg", pmem->start, pmem->len);
-		dt_add_property_string(n, "compatible", "pmem-region");
+		n = dt_new_addr(dt_root, "nvmem", pmem->start);
+		dt_add_property_string(n, "compatible", "ibm,contutto-nvmem");
+		dt_add_property_cells(n, "ibm,chip-id", chip_id);
+		dt_add_property_u64s(n, "reg",
+			pmem->start,
+			pmem->len - (16 * 1024 * 1024),
+			pmem->start + pmem->len - (16 * 1024 * 1024),
+			(16 * 1024 * 1024)
+			);
+
+
+		p = dt_find_property(r->node, "reg");
+		if (p) {
+			u64 new_reg[4];
+
+			u64 *reg = (u64 *) p->prop;
+
+			new_reg[0] = reg[0];
+			new_reg[1] = pmem->start - reg[0];
+			new_reg[2] = pmem->start + pmem->len;
+			new_reg[3] = reg[1] - pmem->len - new_reg[1];
+
+			dt_check_del_prop(r->node, "reg");
+			dt_add_property_u64s(r->node, "reg", new_reg[0],
+					new_reg[1]);//, new_reg[2], new_reg[3]);
+
+		}
 
 		/* copy the NUMA affinity information from the memory node */
 		p = dt_find_property(r->node, "ibm,associativity");
@@ -1440,7 +1464,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 
 void create_pmem_regions(void)
 {
-	const char *opt = nvram_query("pmem");
+	const char *opt = "64M@0"; //nvram_query("pmem");
 	uint64_t size;
 
 	if (!opt)
