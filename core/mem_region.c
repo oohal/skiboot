@@ -1349,3 +1349,89 @@ struct mem_region *mem_region_next(struct mem_region *region)
 
 	return list_entry(node->next, struct mem_region, list);
 }
+
+static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
+{
+	struct mem_region *r, *pmem = NULL; //*last;
+	const struct dt_property *p;
+	struct dt_node *n;
+
+	lock(&mem_region_lock);
+
+	list_for_each(&regions, r, list) {
+		/*
+		 * Only steal memory from regions that were going to passed to
+		 * the OS anyway, but avoid the region spanning 0x0...0x2fffffff
+		 * since that's where we load petitkernel, etc.
+		 */
+		if (r->type != REGION_OS || r->start == 0)
+			continue;
+
+		if (r->chip_id != chip_id)
+			continue;
+
+		if (r->len < size)
+			continue;
+
+		/*
+		 * Split the region and mark it as a hardware reserved region.
+		 * When adding the reserved memory node for this memory it has
+		 * the "no-map" property so the OS won't touch it.
+		 */
+		pmem = split_region(r, r->start + r->len - size,
+					REGION_RESERVED);
+
+		if (!pmem) {
+			prerror("Unable to split pmem region from '%s'\n",
+					r->name);
+			continue;
+		}
+
+		if (!add_region(pmem)) {
+			prerror("Error adding pmem region split from '%s'!\n",
+					r->name);
+
+			r->len += size;
+			free(pmem);
+			pmem = NULL;
+			continue;
+		}
+
+		n = dt_new_addr(dt_root, "pmem", pmem->start);
+		dt_add_property_u64s(n, "reg", pmem->start, pmem->len);
+		dt_add_property_string(n, "compatible", "pmem-region");
+
+		/* copy the NUMA affinity information from the memory node */
+		p = dt_find_property(r->node, "ibm,associativity");
+		if (p)
+			dt_add_property(n, p->name, p->prop, p->len);
+
+		pmem->name = n->name;
+
+		prlog(PR_INFO, "Added pmem region: %s [%p, %p]\n", pmem->name,
+				(void *) pmem->start,
+				(void *)(pmem->start + pmem->len - 1));
+		break;
+	}
+
+	unlock(&mem_region_lock);
+
+	return !!pmem;
+}
+
+#define PMEM_REGION_SIZE (64 * 1024 * 1024)
+
+void create_pmem_regions(void)
+{
+/*
+	char *opt = nvram_query("pmem");
+
+	if (!opt)
+		return;
+
+	while (*opt) {
+	}
+	*/
+
+	create_one_pmem_region(0, PMEM_REGION_SIZE);
+}

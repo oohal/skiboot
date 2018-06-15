@@ -1135,6 +1135,13 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 	/* Now release parts of memory nodes we haven't used ourselves... */
 	mem_region_release_unused();
 
+	/*
+	 * If we're stealing memory to make pmem nodes do it after we've
+	 * released the unused regions so we don't tread on the allocators
+	 * toes.
+	 */
+	create_pmem_regions();
+
 	/* ... and add remaining reservations to the DT */
 	mem_region_add_dt_reserved();
 

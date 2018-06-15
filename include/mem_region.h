@@ -84,4 +84,6 @@ struct mem_region *find_mem_region(const char *name);
 
 bool mem_range_is_reserved(uint64_t start, uint64_t size);
 
+void create_pmem_regions(void);
+
 #endif /* __MEMORY_REGION */
