@@ -794,17 +794,6 @@ void mem_reserve_hwbuf(const char *name, uint64_t start, uint64_t len)
 	mem_reserve(REGION_RESERVED, name, start, len);
 }
 
-static bool matches_chip_id(const __be32 ids[], size_t num, u32 chip_id)
-{
-	size_t i;
-
-	for (i = 0; i < num; i++)
-		if (be32_to_cpu(ids[i]) == chip_id)
-			return true;
-
-	return false;
-}
-
 void *__local_alloc(unsigned int chip_id, size_t size, size_t align,
 		    const char *location)
 {
@@ -816,9 +805,6 @@ void *__local_alloc(unsigned int chip_id, size_t size, size_t align,
 
 restart:
 	list_for_each(&regions, region, list) {
-		const struct dt_property *prop;
-		const __be32 *ids;
-
 		if (!(region->type == REGION_SKIBOOT_HEAP ||
 		      region->type == REGION_MEMORY))
 			continue;
@@ -828,15 +814,8 @@ restart:
 			continue;
 
 		/* First pass, only match node local regions */
-		if (use_local) {
-			if (!region->node)
-				continue;
-			prop = dt_find_property(region->node, "ibm,chip-id");
-			ids = (const __be32 *)prop->prop;
-			if (!matches_chip_id(ids, prop->len/sizeof(u32),
-					     chip_id))
-				continue;
-		}
+		if (use_local && chip_id != region->chip_id)
+			continue;
 
 		/* Second pass, match anything */
 		lock(&region->free_list_lock);
@@ -1044,6 +1023,7 @@ void mem_region_init(void)
 		start = dt_get_address(i, 0, &len);
 		lock(&mem_region_lock);
 		region = new_region(rname, start, len, i, REGION_MEMORY);
+		region->chip_id = dt_get_chip_id(i);
 		if (!region) {
 			prerror("MEM: Could not add mem region %s!\n", i->name);
 			abort();

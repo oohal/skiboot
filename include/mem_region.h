@@ -47,6 +47,7 @@ struct mem_region {
 	const char *name;
 	uint64_t start, len;
 	struct dt_node *node;
+	uint32_t chip_id;
 	enum mem_region_type type;
 	struct list_head free_list;
 	struct lock free_list_lock;
