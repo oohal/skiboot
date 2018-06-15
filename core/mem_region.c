@@ -1374,9 +1374,9 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 			continue;
 
 		/*
-		 * Split the region and mark it as a hardware reserved region.
-		 * When adding the reserved memory node for this memory it has
-		 * the "no-map" property so the OS won't touch it.
+		 * Split the region and mark it as a hardware reserved range.
+		 * For HW reserves the reserved-memory node has the 'no-map'
+		 * property so the OS will ignore it completely.
 		 */
 		pmem = split_region(r, r->start + r->len - size,
 					REGION_RESERVED);
@@ -1423,15 +1423,41 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 
 void create_pmem_regions(void)
 {
-/*
-	char *opt = nvram_query("pmem");
+	const char *opt = "64M@0,32M@0"; //nvram_query("pmem");
+	uint64_t size;
 
 	if (!opt)
 		return;
 
 	while (*opt) {
-	}
-	*/
+		uint32_t chip_id = 0;
 
-	create_one_pmem_region(0, PMEM_REGION_SIZE);
+		size = strtoul(opt, (char **) &opt, 10);
+		prerror("opt1 = '%c'\n", *opt);
+
+		/* :D */
+		switch (*opt) {
+			case 'T': size *= 1024;
+			case 'G': size *= 1024;
+			case 'M': size *= 1024;
+			case 'K': size *= 1024; opt++;
+		}
+		prerror("opt2 = '%c'\n", *opt);
+
+		if (*opt == '@') {
+			opt++;
+			chip_id = strtol(opt, (char **)&opt, 10);
+		}
+
+		prerror("opt3 = '%c'\n", *opt);
+
+		if (*opt == ',')
+			opt++;
+
+		prerror("opt4 = '%c'\n", *opt);
+
+		prerror("Creating pmem region on %x - %p\n",
+			chip_id, (void *) size);
+		create_one_pmem_region(chip_id, size);
+	}
 }
