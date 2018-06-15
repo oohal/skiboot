@@ -1368,11 +1368,14 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 		if (r->type != REGION_OS || r->start == 0)
 			continue;
 
-		if (r->chip_id != chip_id)
+		if (dt_get_chip_id(r->node) != chip_id)
 			continue;
 
-		if (r->len < size)
+		if (r->len < size) {
+			prerror("Suitable region %s too small!\n",
+					r->name);
 			continue;
+		}
 
 		/*
 		 * We need to be aligned to 16MB at the very least, but
