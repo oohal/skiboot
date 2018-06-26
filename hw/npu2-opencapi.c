@@ -842,7 +842,7 @@ static void assert_reset(struct npu2_dev *dev)
 	 * register and a pin is in output mode if its value is 0
 	 */
 	data = ~pin;
-	rc = i2c_request_send(dev->i2c_port_id_ocapi,
+	rc = i2c_request_send(dev->i2c_bus,
 			platform.ocapi->i2c_reset_addr, SMBUS_WRITE,
 			0x3, 1,
 			&data, sizeof(data), 120);
@@ -851,7 +851,7 @@ static void assert_reset(struct npu2_dev *dev)
 
 	/* register 1 controls the signal, reset is active low */
 	data = ~pin;
-	rc = i2c_request_send(dev->i2c_port_id_ocapi,
+	rc = i2c_request_send(dev->i2c_bus,
 			platform.ocapi->i2c_reset_addr, SMBUS_WRITE,
 			0x1, 1,
 			&data, sizeof(data), 120);
@@ -874,7 +874,7 @@ static void deassert_reset(struct npu2_dev *dev)
 	int rc;
 
 	data = 0xFF;
-	rc = i2c_request_send(dev->i2c_port_id_ocapi,
+	rc = i2c_request_send(dev->i2c_bus,
 			platform.ocapi->i2c_reset_addr, SMBUS_WRITE,
 			0x1, 1,
 			&data, sizeof(data), 120);
@@ -899,7 +899,7 @@ static bool i2c_presence_detect(struct npu2_dev *dev)
 	 * Lagrange platforms (ZZ, Zaius) use the same default mechanism.
 	 * Witherspoon will need a specific implementation, TBD.
 	 */
-	rc = i2c_request_send(dev->i2c_port_id_ocapi,
+	rc = i2c_request_send(dev->i2c_bus,
 			platform.ocapi->i2c_presence_addr,
 			SMBUS_READ, 0, 1,
 			&state, 1, 120);
@@ -1646,13 +1646,13 @@ static void npu2_opencapi_setup_device(struct dt_node *dn_link, struct npu2 *n,
 	prlog(PR_DEBUG, "OCAPI: Looking for I2C port %s\n", port_name);
 
 	dt_for_each_compatible(dt_root, dn, "ibm,power9-i2c-port") {
-		if (streq(port_name, dt_prop_get(dn, "ibm,port-name"))) {
-			dev->i2c_port_id_ocapi = dt_prop_get_u32(dn, "ibm,opal-id");
+		if (dt_has_node_property(dn, "ibm,port-name", port_name)) {
+			dev->i2c_bus = i2c_find_bus_by_node(dn);
 			break;
 		}
 	}
 
-	if (!dev->i2c_port_id_ocapi) {
+	if (!dev->i2c_bus) {
 		prlog(PR_ERR, "OCAPI: Couldn't find I2C port %s\n", port_name);
 		goto failed;
 	}

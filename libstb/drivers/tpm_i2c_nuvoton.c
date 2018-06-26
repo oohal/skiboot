@@ -444,10 +444,15 @@ static int tpm_transmit(struct tpm_dev *dev, uint8_t* buf, size_t cmdlen,
 		prlog(PR_ERR, "TPM: tpm device not initialized\n");
 		return STB_ARG_ERROR;
 	}
+
+	/* FIXME: so we have all this per-device stuff and then we just
+	 *        assign it to a shared global anyway... we should fix that.
+	 */
 	tpm_device = dev;
+
 	DBG("**** %s: dev %#x/%#x buf %016llx cmdlen %zu"
 	    " buflen %zu ****\n",
-	    __func__, dev->bus_id, dev->i2c_addr, *(uint64_t*) buf,
+	    __func__, dev->bus->opal_id, dev->i2c_addr, *(uint64_t*) buf,
 	    cmdlen, *buflen);
 
 	DBG("step 1/5: set command ready\n");
@@ -512,7 +517,7 @@ static int nuvoton_tpm_quirk(void *data, struct i2c_request *req, int *rc)
 	 * request go through, it would steal the bus and you'd end up
 	 * in a nice world of pain.
 	 */
-	if (tpm_device->bus_id == req->bus->opal_id &&
+	if (tpm_device->bus == req->bus &&
 	    tpm_device->i2c_addr == req->dev_addr &&
 	    ((req->op == I2C_READ && req->rw_len == 1) ||
 	     (req->op == I2C_WRITE && req->rw_len == 0))) {
@@ -529,7 +534,6 @@ void tpm_i2c_nuvoton_probe(void)
 {
 	struct tpm_dev *tpm_device = NULL;
 	struct dt_node *node = NULL;
-	struct i2c_bus *bus;
 
 	dt_for_each_compatible(dt_root, node, "nuvoton,npct650") {
 		if (!dt_node_is_enabled(node))
@@ -552,18 +556,20 @@ void tpm_i2c_nuvoton_probe(void)
 			      "tpm node %p\n", node);
 			goto disable;
 		}
-		tpm_device->bus_id = dt_prop_get_u32_def(node->parent,
-							 "ibm,opal-id", 0);
-		if (!tpm_device->bus_id &&
-		    !dt_find_property(node->parent, "ibm,opal-id")) {
+
+		tpm_device->bus = i2c_find_bus_by_node(node->parent);
+		if (!tpm_device->bus) {
+			char *bus_name = dt_get_path(node->parent);
 			/*
-			 * @fwts-label NuvotonIbmOpalIdNotFound
-			 * @fwts-advice ibm,opal-id property not found. This
-			 * indicates a Hostboot bug if the property really
-			 * doesn't exist in the tpm node.
+			 * @fwts-label NuvotonI2cBusMissing
+			 * @fwts-advice Skiboot does not know about the I2C
+			 * bus that a TPM is connected to. This is probably a
+			 * firmware bug.
 			 */
-			prlog(PR_ERR, "NUVOTON: ibm,opal-id property not "
-			      "found, tpm node parent %p\n", node->parent);
+			prlog(PR_ERR, "NUVOTON: I2C bus on node %s is not known to skiboot\n",
+					bus_name);
+			free(bus_name);
+
 			goto disable;
 		}
 		if (tpm_register_chip(node, tpm_device,
@@ -571,10 +577,15 @@ void tpm_i2c_nuvoton_probe(void)
 			free(tpm_device);
 			continue;
 		}
-		bus = i2c_find_bus_by_id(tpm_device->bus_id);
-		assert(bus->check_quirk == NULL);
-		bus->check_quirk = nuvoton_tpm_quirk;
-		bus->check_quirk_data = tpm_device;
+
+		/*
+		 * FIXME: Each TPM locality can have it's own I2C interface so
+		 * if we have more than one enabled this is going to explode in
+		 * our faces.
+		 */
+		assert(tpm_device->bus->check_quirk == NULL);
+		tpm_device->bus->check_quirk = nuvoton_tpm_quirk;
+		tpm_device->bus->check_quirk_data = tpm_device;
 
 		/*
 		 * Tweak for linux. It doesn't have a driver compatible

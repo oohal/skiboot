@@ -112,7 +112,7 @@ static inline int i2c_check_quirk(struct i2c_request *req, int *rc)
 }
 
 /* I2C synchronous request API */
-int i2c_request_send(int bus_id, int dev_addr, int read_write,
+int i2c_request_send(struct i2c_bus *bus, int dev_addr, int read_write,
 		     uint32_t offset, uint32_t offset_bytes, void* buf,
 		     size_t buflen, int timeout);
 

@@ -22,13 +22,17 @@
 #include "tss/tpmLogMgr.H"
 #include "tss/trustedTypes.H"
 
+struct i2c_bus;
 struct tpm_dev {
+	/* I2C driver stuff */
+	struct i2c_bus *bus;
+	uint32_t i2c_addr;
 
-	/* TPM bus id */
-	int bus_id;
-
-	/* TPM address in the bus */
-	int i2c_addr;
+	/*
+	 * NB: The tpm_dev structure is intended to be used by every driver.
+	 * If another driver is added, put the required fields in here. It's
+	 * like that so we don't have to slum it and pass around void pointers.
+	 */
 };
 
 struct tpm_driver {

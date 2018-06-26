@@ -52,7 +52,7 @@ int tpm_i2c_request_send(struct tpm_dev *tpm_device, int read_write,
 	 */
 	timeout = (buflen + offset_bytes + 2) * I2C_BYTE_TIMEOUT_MS;
 
-	rc = i2c_request_send(tpm_device->bus_id, tpm_device->i2c_addr, read_write,
+	rc = i2c_request_send(tpm_device->bus, tpm_device->i2c_addr, read_write,
 				offset, offset_bytes, buf, buflen, timeout);
 	if (rc == OPAL_PARAMETER)
 		return STB_ARG_ERROR;

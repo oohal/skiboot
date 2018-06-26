@@ -178,26 +178,17 @@ static void i2c_sync_request_complete(int rc, struct i2c_request *req)
  *
  * Returns: Zero on success otherwise a negative error code
  */
-int i2c_request_send(int bus_id, int dev_addr, int read_write,
-		     uint32_t offset, uint32_t offset_bytes, void* buf,
+int i2c_request_send(struct i2c_bus *bus, int dev_addr, int read_write,
+		     uint32_t offset, uint32_t offset_bytes, void *buf,
 		     size_t buflen, int timeout)
 {
 	int rc, waited, retries;
 	struct i2c_request *req;
-	struct i2c_bus *bus;
 	uint64_t time_to_wait = 0;
 	struct i2c_sync_userdata ud;
 
-	bus = i2c_find_bus_by_id(bus_id);
-	if (!bus) {
-		/**
-		 * @fwts-label I2CInvalidBusID
-		 * @fwts-advice i2c_request_send was passed an invalid bus
-		 * ID. This indicates a bug.
-		 */
-		prlog(PR_ERR, "I2C: Invalid bus_id=%x\n", bus_id);
-		return OPAL_PARAMETER;
-	}
+	/* Passing an NULL bus is a programming error, don't do that */
+	assert(bus);
 
 	req = i2c_alloc_req(bus);
 	if (!req) {
