@@ -45,6 +45,18 @@ struct i2c_bus *i2c_find_bus_by_id(uint32_t opal_id)
 	return NULL;
 }
 
+struct i2c_bus *i2c_find_bus_by_node(struct dt_node *bus_node)
+{
+	struct i2c_bus *cursor;
+
+	list_for_each(&i2c_bus_list, cursor, link) {
+		if (cursor->dt_node == bus_node)
+			return cursor;
+	}
+
+	return NULL;
+}
+
 static void opal_i2c_request_complete(int rc, struct i2c_request *req)
 {
 	uint64_t token = (uint64_t)(unsigned long)req->user_data;
