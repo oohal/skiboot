@@ -62,7 +62,7 @@ static void opal_i2c_request_complete(int rc, struct i2c_request *req)
 	uint64_t token = (uint64_t)(unsigned long)req->user_data;
 
 	opal_queue_msg(OPAL_MSG_ASYNC_COMP, NULL, NULL, token, rc);
-	i2c_free_req(req);
+	free(req);
 }
 
 static int opal_i2c_request(uint64_t async_token, uint32_t bus_id,
@@ -91,7 +91,7 @@ static int opal_i2c_request(uint64_t async_token, uint32_t bus_id,
 		return OPAL_PARAMETER;
 	}
 
-	req = i2c_alloc_req(bus);
+	req = zalloc(sizeof(*req));
 	if (!req) {
 		/**
 		 * @fwts-label I2CFailedAllocation
@@ -121,7 +121,7 @@ static int opal_i2c_request(uint64_t async_token, uint32_t bus_id,
 		req->offset_bytes = oreq->subaddr_sz;
 		break;
 	default:
-		bus->free_req(req);
+		free(req);
 		return OPAL_PARAMETER;
 	}
 	req->dev_addr = oreq->addr;
@@ -132,14 +132,14 @@ static int opal_i2c_request(uint64_t async_token, uint32_t bus_id,
 	req->bus = bus;
 
 	if (i2c_check_quirk(req, &rc)) {
-		i2c_free_req(req);
+		free(req);
 		return rc;
 	}
 
 	/* Finally, queue the OPAL i2c request and return */
 	rc = i2c_queue_req(req);
 	if (rc) {
-		i2c_free_req(req);
+		free(req);
 		return rc;
 	}
 
@@ -190,7 +190,7 @@ int i2c_request_send(struct i2c_bus *bus, int dev_addr, int read_write,
 	/* Passing an NULL bus is a programming error, don't do that */
 	assert(bus);
 
-	req = i2c_alloc_req(bus);
+	req = zalloc(sizeof(*req));
 	if (!req) {
 		/**
 		 * @fwts-label I2CAllocationFailed
@@ -198,10 +198,11 @@ int i2c_request_send(struct i2c_bus *bus, int dev_addr, int read_write,
 		 * i2c_request. This points to an OPAL bug as OPAL run out of
 		 * memory and this should never happen.
 		 */
-		prlog(PR_ERR, "I2C: i2c_alloc_req failed\n");
+		prlog(PR_ERR, "I2C: allocating i2c_request failed\n");
 		return OPAL_INTERNAL_ERROR;
 	}
 
+	req->bus	= bus;
 	req->dev_addr   = dev_addr;
 	req->op         = read_write;
 	req->offset     = offset;
@@ -240,7 +241,7 @@ int i2c_request_send(struct i2c_bus *bus, int dev_addr, int read_write,
 	      (rc) ? "!!!!" : "----", req->op, req->offset,
 	      *(uint64_t*) buf, req->rw_len, tb_to_msecs(waited), timeout, rc);
 
-	i2c_free_req(req);
+	free(req);
 	if (rc)
 		return OPAL_HARDWARE;
 
