@@ -168,15 +168,35 @@ static u64 chips[256];
 
 static int read_prd_msg(struct opal_prd_ctx *ctx);
 
+static bool has_ibm_prefix(const char *name)
+{
+	return !strncmp("ibm,", name, 4);
+}
+
 static struct prd_range *find_range(const char *name, uint32_t instance)
 {
 	struct prd_range *range;
 	unsigned int i;
 
+	/*
+	 * Some hostboots will remove the "ibm," prefix from the various region
+	 * names. Unfortunately there are a few places places (mostly inside of
+	 * opal-prd) where we assume the prd-label has the prefix. To support
+	 * both cases skip over the prefix if we find it in `name` or in
+	 * a region's prd-label.
+	 */
+	if (has_ibm_prefix(name))
+		name += 4;
+
 	for (i = 0; i < ctx->n_ranges; i++) {
+		const char *range_name;
+
 		range = &ctx->ranges[i];
 
-		if (strcmp(range->name, name))
+		range_name = range->name;
+		if (has_ibm_prefix(range_name)) {
+			range_name += 4;
+		if (strcmp(range_name, name))
 			continue;
 
 		if (range->multiple && range->instance != instance)
