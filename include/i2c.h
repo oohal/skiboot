@@ -26,8 +26,6 @@ struct i2c_bus {
 	int			(*queue_req)(struct i2c_request *req);
 	struct i2c_request	*(*alloc_req)(struct i2c_bus *bus);
 	void			(*free_req)(struct i2c_request *req);
-	void			(*set_req_timeout)(struct i2c_request *req,
-						   uint64_t duration);
 	uint64_t		(*run_req)(struct i2c_request *req);
 	int			(*check_quirk)(void *data, struct i2c_request *req, int *rc);
 	void			*check_quirk_data;
@@ -65,6 +63,7 @@ struct i2c_request {
 					      int rc, struct i2c_request *req);
 	void			*user_data;	/* Client data */
 	int			retries;
+	uint64_t		timeout;
 };
 
 /* Generic i2c */
@@ -88,13 +87,6 @@ struct i2c_bus *p8_i2c_find_bus_by_port(uint32_t chip_id, int eng, int port_id);
 static inline int i2c_queue_req(struct i2c_request *req)
 {
 	return req->bus->queue_req(req);
-}
-
-static inline void i2c_set_req_timeout(struct i2c_request *req,
-				       uint64_t duration)
-{
-	if (req->bus->set_req_timeout)
-		req->bus->set_req_timeout(req, duration);
 }
 
 static inline uint64_t i2c_run_req(struct i2c_request *req)

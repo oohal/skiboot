@@ -461,10 +461,9 @@ static int64_t firenze_pci_slot_freset(struct pci_slot *slot)
 		pci_slot_set_state(slot,
 			FIRENZE_PCI_SLOT_FRESET_WAIT_RSP);
 		if (pci_slot_has_flags(slot, PCI_SLOT_FLAG_BOOTUP))
-			i2c_set_req_timeout(plat_slot->req,
-					    FIRENZE_PCI_I2C_TIMEOUT);
+			plat_slot->req->timeout = FIRENZE_PCI_I2C_TIMEOUT;
 		else
-			i2c_set_req_timeout(plat_slot->req, 0ul);
+			plat_slot->req->timeout = 0ul;
 		i2c_queue_req(plat_slot->req);
 		return pci_slot_set_sm_timeout(slot,
 				msecs_to_tb(FIRENZE_PCI_SLOT_DELAY));
@@ -503,10 +502,9 @@ static int64_t firenze_pci_slot_freset(struct pci_slot *slot)
 				FIRENZE_PCI_SLOT_FRESET_WAIT_RSP);
 
 			if (pci_slot_has_flags(slot, PCI_SLOT_FLAG_BOOTUP))
-				i2c_set_req_timeout(plat_slot->req,
-						    FIRENZE_PCI_I2C_TIMEOUT);
+				plat_slot->req->timeout = FIRENZE_PCI_I2C_TIMEOUT;
 			else
-				i2c_set_req_timeout(plat_slot->req, 0ul);
+				plat_slot->req->timeout = 0ul;
 			i2c_queue_req(plat_slot->req);
 			return pci_slot_set_sm_timeout(slot,
 					msecs_to_tb(FIRENZE_PCI_SLOT_DELAY));
@@ -531,10 +529,9 @@ static int64_t firenze_pci_slot_freset(struct pci_slot *slot)
 			FIRENZE_PCI_SLOT_FRESET_WAIT_RSP);
 
 		if (pci_slot_has_flags(slot, PCI_SLOT_FLAG_BOOTUP))
-			i2c_set_req_timeout(plat_slot->req,
-					    FIRENZE_PCI_I2C_TIMEOUT);
+			plat_slot->req->timeout = FIRENZE_PCI_I2C_TIMEOUT;
 		else
-			i2c_set_req_timeout(plat_slot->req, 0ul);
+			plat_slot->req->timeout = 0ul;
 		i2c_queue_req(plat_slot->req);
 		return pci_slot_set_sm_timeout(slot,
 				msecs_to_tb(FIRENZE_PCI_SLOT_DELAY));
@@ -687,9 +684,9 @@ static int64_t firenze_pci_slot_set_power_state(struct pci_slot *slot,
 	}
 
 	if (pci_slot_has_flags(slot, PCI_SLOT_FLAG_BOOTUP))
-		i2c_set_req_timeout(plat_slot->req, FIRENZE_PCI_I2C_TIMEOUT);
+		plat_slot->req->timeout = FIRENZE_PCI_I2C_TIMEOUT;
 	else
-		i2c_set_req_timeout(plat_slot->req, 0ul);
+		plat_slot->req->timeout = 0ul;
 	i2c_queue_req(plat_slot->req);
 
 	return OPAL_ASYNC_COMPLETION;
@@ -754,7 +751,7 @@ static int64_t firenze_pci_slot_fixup_one_reg(struct pci_slot *slot,
 		*(uint8_t *)(req->rw_buf) = 0;
 	}
 	pci_slot_set_state(slot, FIRENZE_PCI_SLOT_FRESET_WAIT_RSP);
-	i2c_set_req_timeout(req, FIRENZE_PCI_I2C_TIMEOUT);
+	req->timeout = FIRENZE_PCI_I2C_TIMEOUT;
 	i2c_queue_req(plat_slot->req);
 
 	while (retries-- > 0) {
