@@ -899,10 +899,8 @@ static bool i2c_presence_detect(struct npu2_dev *dev)
 	 * Lagrange platforms (ZZ, Zaius) use the same default mechanism.
 	 * Witherspoon will need a specific implementation, TBD.
 	 */
-	rc = i2c_request_send(dev->i2c_bus,
-			platform.ocapi->i2c_presence_addr,
-			SMBUS_READ, 0, 1,
-			&state, 1, 120);
+	rc = pca9554_reg_read(dev->i2c_bus, platform.ocapi->i2c_presence_addr,
+			PCA9554_REG_INPUT, &state);
 	if (rc) {
 		OCAPIERR(dev, "error detecting link presence: %d\n", rc);
 		return true; /* assume link exists */
