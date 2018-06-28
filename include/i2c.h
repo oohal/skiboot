@@ -103,4 +103,16 @@ extern void p8_i2c_interrupt(uint32_t chip_id);
 /* P9 I2C Ownership Change OCC interrupt handler */
 extern void p9_i2c_bus_owner_change(u32 chip_id);
 
+/* PCA9554 GPIO expander accessors */
+
+#define PCA9554_REG_INPUT  0x0
+#define PCA9554_REG_OUTPUT 0x1
+#define PCA9554_REG_INVERT 0x2
+#define PCA9554_REG_CONFIG 0x3
+
+int64_t pca9554_reg_read(struct i2c_bus *bus, int addr, int reg, uint8_t *v);
+int64_t pca9554_reg_write(struct i2c_bus *bus, int addr, int reg, uint8_t v);
+int64_t pca9554_set_bits(struct i2c_bus *bus, int addr, int reg, uint8_t mask);
+int64_t pca9554_clr_bits(struct i2c_bus *bus, int addr, int reg, uint8_t mask);
+
 #endif /* __I2C_H */
