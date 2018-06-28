@@ -194,6 +194,16 @@ static bool is_zeros(const void *p, size_t size)
 	return true;
 }
 
+
+static void add_i2c_buses(struct dt_node *xscom, int engine_id, int ports)
+{
+	struct dt_node *i2cm = get_i2cm_node(xscom, engine_id);
+	int i;
+
+	for (i = 0; i < ports; i++)
+		get_bus_node(i2cm, i, 400);
+}
+
 struct host_i2c_hdr {
 	const struct HDIF_array_hdr hdr;
 	__be32 version;
@@ -218,6 +228,10 @@ int parse_i2c_devs(const struct HDIF_common_hdr *hdr, int idata_index,
 	 * and will need updating for new processors
 	 */
 	assert(proc_gen == proc_gen_p9);
+
+	add_i2c_buses(xscom, 1, 12);
+	add_i2c_buses(xscom, 2, 2);
+	add_i2c_buses(xscom, 3, 2);
 
 	/*
 	 * Emit an error if we get a newer version. This is an interim measure
