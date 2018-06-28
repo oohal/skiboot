@@ -81,6 +81,9 @@ static inline void i2c_free_req(struct i2c_request *req)
 	req->bus->free_req(req);
 }
 
+/* not generic, but useful */
+struct i2c_bus *p8_i2c_find_bus_by_port(uint32_t chip_id, int eng, int port_id);
+
 static inline int i2c_queue_req(struct i2c_request *req)
 {
 	return req->bus->queue_req(req);

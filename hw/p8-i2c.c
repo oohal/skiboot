@@ -1681,3 +1681,26 @@ void p8_i2c_init(void)
 			p8_i2c_init_one(i2cm, i);
 	}
 }
+
+struct i2c_bus *p8_i2c_find_bus_by_port(uint32_t chip_id, int eng, int port_num)
+{
+	struct proc_chip *chip = get_chip(chip_id);
+	struct p8_i2c_master_port *port;
+	struct p8_i2c_master *master;
+
+	if (!chip)
+		return NULL;
+
+	list_for_each(&chip->i2cms, master, link)
+		if (master->engine_id == eng)
+			break;
+
+	if (!master)
+		return NULL;
+
+	list_for_each(&master->ports, port, link)
+		if (port->port_num == port_num)
+			return &port->bus;
+
+	return NULL;
+}
