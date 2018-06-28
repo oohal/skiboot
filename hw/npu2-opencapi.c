@@ -1577,7 +1577,7 @@ static void npu2_opencapi_setup_device(struct dt_node *dn_link, struct npu2 *n,
 				       struct npu2_dev *dev)
 {
 	uint32_t dev_index, npu_index;
-	struct dt_node *dn_phb, *dn;
+	struct dt_node *dn_phb;
 	struct pci_slot *slot;
 	char port_name[17];
 	uint64_t mm_win[2];
@@ -1640,17 +1640,9 @@ static void npu2_opencapi_setup_device(struct dt_node *dn_link, struct npu2 *n,
 	n->total_devices++;
 
 	/* Find I2C port for handling device reset */
-	snprintf(port_name, sizeof(port_name), "p8_%08x_e%dp%d",
-		 dev->npu->chip_id, platform.ocapi->i2c_engine,
-		 platform.ocapi->i2c_port);
-	prlog(PR_DEBUG, "OCAPI: Looking for I2C port %s\n", port_name);
-
-	dt_for_each_compatible(dt_root, dn, "ibm,power9-i2c-port") {
-		if (dt_has_node_property(dn, "ibm,port-name", port_name)) {
-			dev->i2c_bus = i2c_find_bus_by_node(dn);
-			break;
-		}
-	}
+	dev->i2c_bus = p8_i2c_find_bus_by_port(dev->npu->chip_id,
+				platform.ocapi->i2c_engine,
+				platform.ocapi->i2c_port);
 
 	if (!dev->i2c_bus) {
 		prlog(PR_ERR, "OCAPI: Couldn't find I2C port %s\n", port_name);
