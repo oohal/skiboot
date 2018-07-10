@@ -1414,15 +1414,16 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 		}
 
 		n = dt_new_addr(dt_root, "nvmem", pmem->start);
-		dt_add_property_string(n, "compatible", "ibm,contutto-nvmem");
+		dt_add_property_string(n, "compatible", "pmem-region");
+		//dt_add_property_string(n, "compatible", "ibm,contutto-nvmem");
 		dt_add_property_cells(n, "ibm,chip-id", chip_id);
-		dt_add_property_u64s(n, "reg",
-			pmem->start,
-			pmem->len - (16 * 1024 * 1024),
+		dt_add_property_u64s(n, "reg", pmem->start, pmem->len);
+		/*
+	       	- (16 * 1024 * 1024),
 			pmem->start + pmem->len - (16 * 1024 * 1024),
 			(16 * 1024 * 1024)
 			);
-
+			*/
 
 		p = dt_find_property(r->node, "reg");
 		if (p) {
@@ -1464,7 +1465,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 
 void create_pmem_regions(void)
 {
-	const char *opt = "64M@0"; //nvram_query("pmem");
+	const char *opt = nvram_query("pmem");
 	uint64_t size;
 
 	if (!opt)
