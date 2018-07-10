@@ -1449,7 +1449,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 
 		pmem->name = n->name;
 
-		prlog(PR_INFO, "Added pmem region: %s [%p, %p]\n", pmem->name,
+		prlog(PR_ERR, "Added pmem region: %s [%p, %p]\n", pmem->name,
 				(void *) pmem->start,
 				(void *)(pmem->start + pmem->len - 1));
 		break;
@@ -1465,7 +1465,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 
 void create_pmem_regions(void)
 {
-	const char *opt = nvram_query("pmem");
+	const char *opt = "64M@0";//nvram_query("pmem");
 	uint64_t size;
 
 	if (!opt)
