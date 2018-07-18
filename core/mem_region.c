@@ -1352,7 +1352,7 @@ struct mem_region *mem_region_next(struct mem_region *region)
 
 static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 {
-	struct mem_region *r, *pmem = NULL; //*last;
+	struct mem_region *r, *pmem = NULL, *suitable = NULL; //*last;
 	const struct dt_property *p;
 	struct dt_node *n;
 	uint64_t split_at;
@@ -1376,7 +1376,13 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 					r->name);
 			continue;
 		}
+		if (r->start > suitable->start)
+			suitable = r;
+	}
+	if(!suitable)
+		goto out;
 
+	r = suitable;
 		/*
 		 * We need to be aligned to 16MB at the very least, but
 		 * align larger regions to 1GB to ensure we can use 1GB
@@ -1400,7 +1406,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 		if (!pmem) {
 			prerror("Unable to split pmem region from '%s'\n",
 					r->name);
-			continue;
+			goto out;
 		}
 
 		if (!add_region(pmem)) {
@@ -1410,7 +1416,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 			r->len += size;
 			free(pmem);
 			pmem = NULL;
-			continue;
+			goto out;
 		}
 
 		n = dt_new_addr(dt_root, "nvmem", pmem->start);
@@ -1452,9 +1458,7 @@ static bool create_one_pmem_region(uint32_t chip_id, uint64_t size)
 		prlog(PR_ERR, "Added pmem region: %s [%p, %p]\n", pmem->name,
 				(void *) pmem->start,
 				(void *)(pmem->start + pmem->len - 1));
-		break;
-	}
-
+out:
 	unlock(&mem_region_lock);
 
 	return !!pmem;
