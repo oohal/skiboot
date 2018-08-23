@@ -526,7 +526,7 @@ static int64_t phb4_pcicfg_write(struct phb4 *p, uint32_t bdfn,
 				 uint32_t offset, uint32_t size,
 				 uint32_t data)
 {
-	uint64_t addr, v;
+	uint64_t addr;
 	int64_t rc;
 	uint16_t pe;
 	bool use_asb = false;
@@ -559,15 +559,6 @@ static int64_t phb4_pcicfg_write(struct phb4 *p, uint32_t bdfn,
 	addr = SETFIELD(PHB_CA_BDFN, addr, bdfn);
 	addr = SETFIELD(PHB_CA_REG, addr, offset & ~3u);
 	addr = SETFIELD(PHB_CA_PE, addr, pe);
-
-	phb4_ioda_sel(p, IODA3_TBL_PESTA, pe, true);
-	v = phb4_read_reg_asb(p, PHB_IODA_DATA0);
-	if (v & PPC_BIT(0)) {
-		PHBDBG(p, "Dropping CFG write to bdfn %#x, reg %#x. PE#%x is already frozen (%08llx)\n",
-			bdfn, offset, pe, v);
-		return OPAL_SUCCESS;
-	}
-
 	if (use_asb) {
 		/* We don't support ASB config space writes */
 		return OPAL_UNSUPPORTED;
