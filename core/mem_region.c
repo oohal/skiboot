@@ -1469,7 +1469,8 @@ out:
 
 void create_pmem_regions(void)
 {
-	const char *opt = "64M@0";//nvram_query("pmem");
+//	const char *opt = "64M@0,64M@0";
+	const char *opt = nvram_query("pmem");
 	uint64_t size;
 
 	if (!opt)
