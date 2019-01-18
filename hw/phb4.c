@@ -154,6 +154,8 @@ static bool pci_eeh_mmio;
 static bool pci_retry_all;
 static int rx_err_max = PHB4_RX_ERR_MAX;
 
+static bool phb4_fenced(struct phb4 *p);
+
 /* Note: The "ASB" name is historical, practically this means access via
  * the XSCOM backdoor
  */
@@ -1127,6 +1129,9 @@ static int64_t phb4_ioda_reset(struct phb *phb, bool purge)
 			phb->slot->link_retries = PHB4_LINK_LINK_RETRIES;
 		phb4_init_ioda_cache(p);
 	}
+
+	if (phb4_fenced(p))
+		return OPAL_HARDWARE;
 
 	/* Init_30..31 - Errata workaround, clear PESTA entry 0 */
 	phb4_ioda_sel(p, IODA3_TBL_PESTA, 0, false);
