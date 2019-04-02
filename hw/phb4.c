@@ -443,12 +443,9 @@ static int64_t phb4_pcicfg_read(struct phb4 *p, uint32_t bdfn,
 	if (rc)
 		return rc;
 
+	/* If the AIB is fenced then DON'T DO CONFIG ACCESSES, PERIOD */
 	if (p->flags & PHB4_AIB_FENCED) {
-		if (!(p->flags & PHB4_CFG_USE_ASB))
-			return OPAL_HARDWARE;
-		if (bdfn != 0)
-			return OPAL_HARDWARE;
-		use_asb = true;
+		return OPAL_HARDWARE;
 	} else if ((p->flags & PHB4_CFG_BLOCKED) && bdfn != 0) {
 		return OPAL_HARDWARE;
 	}
@@ -536,12 +533,9 @@ static int64_t phb4_pcicfg_write(struct phb4 *p, uint32_t bdfn,
 	if (rc)
 		return rc;
 
+	/* don't do config accesses if the AIB is fenced */
 	if (p->flags & PHB4_AIB_FENCED) {
-		if (!(p->flags & PHB4_CFG_USE_ASB))
-			return OPAL_HARDWARE;
-		if (bdfn != 0)
-			return OPAL_HARDWARE;
-		use_asb = true;
+		return OPAL_HARDWARE;
 	} else if ((p->flags & PHB4_CFG_BLOCKED) && bdfn != 0) {
 		return OPAL_HARDWARE;
 	}
