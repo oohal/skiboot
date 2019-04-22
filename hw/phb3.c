@@ -4735,6 +4735,7 @@ static void phb3_create(struct dt_node *np)
 		       be64_to_cpu(p->lane_eq[2]), be64_to_cpu(p->lane_eq[3]));
 	}
 
+#if 0
 	/*
 	 * Grab CEC IO VPD load info from the root of the device-tree,
 	 * on P8 there's a single such VPD for the whole machine
@@ -4744,7 +4745,7 @@ static void phb3_create(struct dt_node *np)
 		/* LX VPD Lid not already loaded */
 		vpd_iohub_load(dt_root);
 	}
-
+#endif
 	/* Allocate the SkiBoot internal in-memory tables for the PHB */
 	phb3_allocate_tables(p);
 
