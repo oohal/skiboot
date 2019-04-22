@@ -1160,7 +1160,7 @@ void init_all_cpus(void)
 {
 	struct dt_node *cpus, *cpu;
 	unsigned int thread;
-	int dec_bits = find_dec_bits();
+//	int dec_bits = find_dec_bits();
 
 	cpus = dt_find_by_path(dt_root, "/cpus");
 	assert(cpus);
@@ -1220,7 +1220,7 @@ void init_all_cpus(void)
 		add_core_associativity(t);
 
 		/* Add the decrementer width property */
-		dt_add_property_cells(cpu, "ibm,dec-bits", dec_bits);
+//		dt_add_property_cells(cpu, "ibm,dec-bits", dec_bits);
 
 		/* Iterate threads */
 		p = dt_find_property(cpu, "ibm,ppc-interrupt-server#s");
