@@ -55,6 +55,35 @@
 #include <debug_descriptor.h>
 #include <occ.h>
 
+void main_cpu_entry(void);
+void __noreturn main_cpu_entry(void) {
+	for (;;) {}
+}
+
+void secondary_cpu_entry(void);
+void __noreturn secondary_cpu_entry(void) {
+	for (;;) {}
+}
+
+void __secondary_cpu_entry(void);
+void __noreturn __secondary_cpu_entry(void) {
+	for (;;) {}
+}
+
+void fast_reboot_entry(void);
+void __noreturn fast_reboot_entry(void) {
+	for (;;) {}
+}
+
+void __attribute__((const)) disable_fast_reboot(const char *reason __unused)
+{
+	return;
+}
+
+void __attribute__((const)) fast_reboot(void) {
+	return;
+}
+
 enum proc_gen proc_gen;
 unsigned int pcie_max_link_speed;
 

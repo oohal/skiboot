@@ -1066,7 +1066,7 @@ void init_boot_cpu(void)
 	assert(this_cpu() == boot_cpu);
 	init_hid();
 }
-
+#if 0
 static void enable_large_dec(bool on)
 {
 	u64 lpcr = mfspr(SPR_LPCR);
@@ -1111,7 +1111,7 @@ static int find_dec_bits(void)
 	prlog(PR_DEBUG, "CPU: decrementer bits %d\n", bits);
 	return bits;
 }
-
+#endif
 static void init_tm_suspend_mode_property(void)
 {
 	struct dt_node *node;
