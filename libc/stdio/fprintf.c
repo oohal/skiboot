@@ -11,7 +11,7 @@
  *****************************************************************************/
 
 #include "stdio.h"
-
+#if 0
 
 int fprintf(FILE *stream, const char* fmt, ...)
 {
@@ -24,3 +24,4 @@ int fprintf(FILE *stream, const char* fmt, ...)
     
 	return count;
 }
+#endif

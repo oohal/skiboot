@@ -102,7 +102,7 @@ struct debug_descriptor debug_descriptor = {
 #ifdef DEBUG
 	.console_log_levels = (PR_TRACE << 4) | PR_DEBUG,
 #else
-	.console_log_levels = (PR_DEBUG << 4) | PR_NOTICE,
+	.console_log_levels = (PR_TRACE << 4) | PR_DEBUG,
 #endif
 };
 
@@ -204,7 +204,8 @@ static void pci_nvram_init(void)
  *   but it should be possible
  */
 
-void main(void)
+void do_opal_inits(void *fdt_buf);
+void do_opal_inits(void *fdt_buf)
 {
 	/* Call library constructors  -- do we need to do this here?*/
 	do_ctors();
@@ -244,7 +245,7 @@ void main(void)
 
 	// FIXME: source the DT from somewhere, maybe just inhale a file
 	dt_root = dt_new_root("");
-	dt_expand(fdt);
+	dt_expand(fdt_buf);
 
 	/*
 	 * From there, we follow a fairly strict initialization order.
@@ -266,6 +267,8 @@ void main(void)
 	 * region length can be set according to the maximum PIR.
 	 */
 	init_cpu_max_pir();
+
+	mem_region_init();
 
 	/* Initialize the rest of the cpu thread structs */
 	init_all_cpus();

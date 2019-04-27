@@ -70,7 +70,6 @@ void _prlog(int log_level, const char* fmt, ...)
 	vprlog(log_level, fmt, ap);
 	va_end(ap);
 }
-
 int _printf(const char* fmt, ...)
 {
 	int count;

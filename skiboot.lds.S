@@ -60,7 +60,6 @@
   .debug_macro    0 : { *(.debug_macro) }				\
   .debug_addr     0 : { *(.debug_addr) }
 
-ENTRY(boot_entry);
 SECTIONS
 {
 	_start = .;

@@ -27,7 +27,9 @@
 #include <processor.h>
 #include <cpu.h>
 
-static char *con_buf = (char *)INMEM_CON_START;
+extern long __memcons_start;
+
+static char *con_buf = (char *) &__memcons_start;
 static size_t con_in;
 static size_t con_out;
 static bool con_wrapped;
@@ -43,8 +45,8 @@ static struct lock con_lock = LOCK_UNLOCKED;
 /* This is mapped via TCEs so we keep it alone in a page */
 struct memcons memcons __section(".data.memcons") = {
 	.magic		= MEMCONS_MAGIC,
-	.obuf_phys	= INMEM_CON_START,
-	.ibuf_phys	= INMEM_CON_START + INMEM_CON_OUT_LEN,
+	.obuf_phys	= (u64) &__memcons_start,
+	.ibuf_phys	= (u64) &__memcons_start + INMEM_CON_OUT_LEN,
 	.obuf_size	= INMEM_CON_OUT_LEN,
 	.ibuf_size	= INMEM_CON_IN_LEN,
 };
@@ -231,11 +233,10 @@ static size_t inmem_read(char *buf, size_t req)
 	return read;
 }
 
+void userspace_console_write(const char *l, int length);
 static void write_char(char c)
 {
-#ifdef MAMBO_DEBUG_CONSOLE
-	mambo_console_write(&c, 1);
-#endif
+	userspace_console_write(&c, 1);
 	inmem_write(c);
 }
 

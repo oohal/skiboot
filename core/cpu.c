@@ -987,8 +987,8 @@ void init_boot_cpu(void)
 {
 	unsigned int pir, pvr;
 
-	pir = mfspr(SPR_PIR);
-	pvr = mfspr(SPR_PVR);
+	pir = 0; //mfspr(SPR_PIR);
+	pvr = 0x04d0200;   mfspr(SPR_PVR);
 
 	/* Get CPU family and other flags based on PVR */
 	switch(PVR_TYPE(pvr)) {
@@ -999,7 +999,7 @@ void init_boot_cpu(void)
 	case PVR_TYPE_P8E:
 	case PVR_TYPE_P8:
 		proc_gen = proc_gen_p8;
-		hile_supported = PVR_VERS_MAJ(mfspr(SPR_PVR)) >= 2;
+		hile_supported = PVR_VERS_MAJ(pvr) >= 2;
 		hid0_hile = SPR_HID0_POWER8_HILE;
 		hid0_attn = SPR_HID0_POWER8_ENABLE_ATTN;
 		break;
@@ -1063,8 +1063,8 @@ void init_boot_cpu(void)
 	boot_cpu = &cpu_stacks[pir].cpu;
 	init_cpu_thread(boot_cpu, cpu_state_active, pir);
 	init_boot_tracebuf(boot_cpu);
-	assert(this_cpu() == boot_cpu);
-	init_hid();
+//	assert(this_cpu() == boot_cpu);
+	//init_hid();
 }
 #if 0
 static void enable_large_dec(bool on)

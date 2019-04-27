@@ -12,6 +12,7 @@
 
 #include "stdio.h"
 #include "unistd.h"
+#if 0
 
 int fputc(int ch, FILE *stream)
 {
@@ -22,3 +23,4 @@ int fputc(int ch, FILE *stream)
 	else
 		return EOF;
 }
+#endif

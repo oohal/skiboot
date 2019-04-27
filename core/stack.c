@@ -59,7 +59,7 @@ void __nomcount backtrace_create(struct bt_entry *entries,
 	else
 		metadata->token = -1UL;
 
-	metadata->pir = mfspr(SPR_PIR);
+	metadata->pir = 0;//mfspr(SPR_PIR);
 }
 
 void backtrace_print(struct bt_entry *entries, struct bt_metadata *metadata,

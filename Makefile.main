@@ -24,7 +24,7 @@ test_cflag = $(call try,$(1) $(2) -x c -c /dev/null -o /dev/null,1,0)
 cc-name := $(shell $(CC) -v 2>&1 | grep -q "clang version" && echo clang || echo gcc)
 
 # Base warnings
-CWARNS := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
+CWARNS := -Wundef -Wstrict-prototypes -Wno-trigraphs \
 	  -Werror-implicit-function-declaration -Wdeclaration-after-statement \
 	  -Wno-pointer-sign -Wextra -Wno-sign-compare \
 	  -Wmissing-prototypes -Wmissing-declarations \

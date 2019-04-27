@@ -16,8 +16,10 @@
 #include "unistd.h"
 
 
+#if 0
 int fputs(const char *str, FILE *stream)
 {
 	return write(stream->fd, str, strlen(str));
 }
+#endif
 

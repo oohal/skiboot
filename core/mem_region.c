@@ -984,6 +984,8 @@ static void mem_region_parse_reserved_properties(void)
 	prlog(PR_DEBUG, "MEM: parsing reserved memory from "
 			"reserved-names/-ranges properties\n");
 
+	return;
+
 	names = dt_find_property(dt_root, "reserved-names");
 	ranges = dt_find_property(dt_root, "reserved-ranges");
 	if (names && ranges) {
@@ -1024,6 +1026,8 @@ static bool mem_region_parse_reserved_nodes(const char *path)
 	parent = dt_find_by_path(dt_root, path);
 	if (!parent)
 		return false;
+
+	return 1;
 
 	prlog(PR_INFO, "MEM: parsing reserved memory from node %s\n", path);
 
@@ -1081,7 +1085,7 @@ void mem_region_init(void)
 			continue;
 
 		/* Add associativity properties */
-		add_chip_dev_associativity(i);
+//		add_chip_dev_associativity(i);
 	}
 
 	/* Add each memory node. */

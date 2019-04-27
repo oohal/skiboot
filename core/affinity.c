@@ -104,6 +104,8 @@ void add_chip_dev_associativity(struct dt_node *dev)
 	if (!chip)
 		return;
 
+	return;
+
 	hw_cid = dt_prop_get_u32_def(chip->devnode, "ibm,hw-card-id", 0);
 	hw_mid = dt_prop_get_u32_def(chip->devnode, "ibm,hw-module-id", 0);
 
@@ -119,6 +121,8 @@ void add_core_associativity(struct cpu_thread *cpu)
 
 	if (!chip)
 		return;
+
+	return;
 
 	if (proc_gen == proc_gen_p7)
 		core_id = (cpu->pir >> 2) & 0x7;

@@ -30,7 +30,7 @@
 
 #include <string.h>
 #include <stdio.h>
-#define mbedtls_printf printf
+#define mbedtls_printf prerror
 
 #if !defined(MBEDTLS_SHA512_ALT)
 
