@@ -250,6 +250,9 @@ u32 __dt_get_chip_id(const struct dt_node *node);
 u64 dt_get_address(const struct dt_node *node, unsigned int index,
 		   u64 *out_size);
 
+u64 dt_read_address(const struct dt_node *node, const char *prop, int na, int ns,
+		    unsigned int index, u64 *out_size);
+
 /* Count "reg" property entries */
 unsigned int dt_count_addresses(const struct dt_node *node);
 

@@ -941,21 +941,29 @@ u32 dt_n_size_cells(const struct dt_node *node)
 	return dt_prop_get_u32_def(node->parent, "#size-cells", 1);
 }
 
-u64 dt_get_address(const struct dt_node *node, unsigned int index,
-		   u64 *out_size)
+
+u64 dt_read_address(const struct dt_node *node, const char *prop, int na, int ns,
+		    unsigned int index, u64 *out_size)
 {
 	const struct dt_property *p;
-	u32 na = dt_n_address_cells(node);
-	u32 ns = dt_n_size_cells(node);
 	u32 pos, n;
 
-	p = dt_require_property(node, "reg", -1);
+	p = dt_require_property(node, prop, -1);
 	n = (na + ns) * sizeof(u32);
 	pos = n * index;
 	assert((pos + n) <= p->len);
 	if (out_size)
 		*out_size = dt_get_number(p->prop + pos + na * sizeof(u32), ns);
 	return dt_get_number(p->prop + pos, na);
+}
+
+u64 dt_get_address(const struct dt_node *node, unsigned int index,
+		   u64 *out_size)
+{
+	u32 na = dt_n_address_cells(node);
+	u32 ns = dt_n_size_cells(node);
+
+	return dt_read_address(node, "reg", na, ns, index, out_size);
 }
 
 u32 __dt_get_chip_id(const struct dt_node *node)
