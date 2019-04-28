@@ -531,6 +531,10 @@ static uint64_t psi_p8_irq_attributes(struct irq_source *is, uint32_t isn)
 	    psi_ext_irq_policy == EXTERNAL_IRQ_POLICY_LINUX)
 		return IRQ_ATTR_TARGET_LINUX;
 
+	/* HACK: get us an IRQ that's not muxed with the UART */
+	if (idx == P8_IRQ_PSI_FSI)
+		return IRQ_ATTR_TARGET_LINUX | IRQ_ATTR_TYPE_LSI;
+
 	attr = IRQ_ATTR_TARGET_OPAL | IRQ_ATTR_TYPE_LSI;
 	if (idx == P8_IRQ_PSI_EXTERNAL || idx == P8_IRQ_PSI_LPC ||
 	    idx == P8_IRQ_PSI_FSP)

@@ -18,6 +18,8 @@
 #include <console.h>
 #include <device.h>
 #include <ipmi.h>
+#include <psi.h>
+#include <interrupts.h>
 
 #include <platforms/astbmc/astbmc.h>
 
@@ -49,10 +51,25 @@ static void qemu_init(void)
 	}
 }
 
+static void qemu_pre_kernel(void)
+{
+	struct dt_node *n;
+
+	// add an interrupt for the virtio device
+	dt_for_each_compatible(dt_root, n, "virtio,mmio") {
+		uint32_t chip_id = dt_get_chip_id(n);
+		uint32_t irq = get_psi_interrupt(chip_id) + P8_IRQ_PSI_FSI;
+
+		dt_add_property_cells(n, "interrupts", irq, 1);
+		dt_add_property_cells(n, "interrupt-parent", get_ics_phandle());
+	}
+}
+
 DECLARE_PLATFORM(qemu) = {
 	.name		= "Qemu",
 	.probe		= qemu_probe,
 	.init		= qemu_init,
+	.exit 		= qemu_pre_kernel,
 	.external_irq   = astbmc_ext_irq_serirq_cpld,
 	.cec_power_down = astbmc_ipmi_power_down,
 	.cec_reboot     = astbmc_ipmi_reboot,
