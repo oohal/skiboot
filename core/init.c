@@ -99,12 +99,14 @@ struct debug_descriptor debug_descriptor = {
 	.trace_mask	= 0, /* All traces disabled by default */
 	/* console log level:
 	 *   high 4 bits in memory, low 4 bits driver (e.g. uart). */
-#ifdef DEBUG
-	.console_log_levels = (PR_TRACE << 4) | PR_DEBUG,
-#else
-	.console_log_levels = (PR_TRACE << 4) | PR_DEBUG,
-#endif
+	.console_log_levels = (PR_TRACE << 4) | PR_TRACE,
 };
+
+void print_debug_desc(const char *file, int line);
+void print_debug_desc(const char *file, int line)
+{
+	prerror("%s:%d: debug desc = %x\n", file, line, debug_descriptor.console_log_levels);
+}
 
 extern uint64_t boot_offset;
 
@@ -190,6 +192,24 @@ static void pci_nvram_init(void)
 	}
 }
 
+
+
+// defined in the shim
+void map_one(uint64_t addr, uint64_t size);
+
+static void map_cell(struct dt_node *n, const char *prop)
+{
+	uint64_t addr, size = 0;
+
+	if (streq(prop, "reg"))
+		addr = dt_get_address(n, 0, &size);
+	else
+		addr = dt_read_address(n, prop, 2, 1, 0, &size);
+
+	map_one(addr, size);
+}
+
+
 /* what do we need to do here exactly?
  *
  * Remember the end goal is to have this running in userspace entirely seperate to the rest of
@@ -207,6 +227,8 @@ static void pci_nvram_init(void)
 void do_opal_inits(void *fdt_buf);
 void do_opal_inits(void *fdt_buf)
 {
+	struct dt_node *dn;
+
 	/* Call library constructors  -- do we need to do this here?*/
 	do_ctors();
 
@@ -220,7 +242,7 @@ void do_opal_inits(void *fdt_buf)
 	prlog(PR_DEBUG, "initial console log level: memory %d, driver %d\n",
 	       (debug_descriptor.console_log_levels >> 4),
 	       (debug_descriptor.console_log_levels & 0x0f));
-	prlog(PR_TRACE, "OPAL is Powered By Linked-List Technology.\n");
+	prlog(PR_TRACE, "OPAL is Powered By Hacks From the Bong (TM).\n");
 
 #ifdef SKIBOOT_GCOV
 	skiboot_gcov_done();
@@ -260,6 +282,10 @@ void do_opal_inits(void *fdt_buf)
 	 * to access chips via that path early on.
 	 */
 	init_chips();
+
+	dt_for_each_compatible(dt_root, dn, "ibm,xscom")
+		map_cell(dn, "reg");
+
 	xscom_init();
 
 	/*
@@ -286,6 +312,8 @@ void do_opal_inits(void *fdt_buf)
 	 */
 	// we'll need to be careful here. the platform can do things that'll break in
 	// standalone mode
+	prerror("%s:%d: debug desc = %x\n", __FILE__, __LINE__,
+		debug_descriptor.console_log_levels);
 	probe_platform();
 
 	/* Allocate our split trace buffers now. Depends add_opal_node() */
@@ -330,8 +358,16 @@ void do_opal_inits(void *fdt_buf)
 	/* Read in NVRAM and set it up */
 	nvram_init();
 
+	prerror("%s:%d: debug desc = %x\n", __FILE__, __LINE__,
+		debug_descriptor.console_log_levels);
 	/* Set the console level */
 	console_log_level();
+}
+
+void do_pci_inits(void);
+void do_pci_inits(void)
+{
+	struct dt_node *dn;
 
 	pci_nvram_init();
 
@@ -342,12 +378,25 @@ void do_opal_inits(void *fdt_buf)
 	// need to reload it after a CAPP reset, but deal with that later.
 	//preload_capp_ucode(); // needed?
 
-
+	// map the xscom ranges
 	/* Probe IO hubs */
 	probe_p7ioc();
 
+	dt_for_each_compatible(dt_root, dn, "ibm,power8-pciex") {
+		map_cell(dn, "reg");
+
+		map_cell(dn, "ibm,opal-ivt-table");
+		map_cell(dn, "ibm,opal-peltv-table");
+		map_cell(dn, "ibm,opal-pest-table");
+		map_cell(dn, "ibm,opal-rba-table");
+		map_cell(dn, "ibm,opal-rtt-table");
+	}
+
+	prerror("%s:%d: debug desc = %x\n", __FILE__, __LINE__,
+		debug_descriptor.console_log_levels);
 	/* Probe PHB3 on P8 */
 	probe_phb3();
+	prerror("%s:%d: debug desc = %x\n", __FILE__, __LINE__, debug_descriptor.console_log_levels);
 
 	/* Probe PHB4 on P9 */
 	probe_phb4();
@@ -359,40 +408,3 @@ void do_opal_inits(void *fdt_buf)
 	/* Initialize do the actual PCI scanning */
 	pci_init_slots();
 }
-#if 0
-void __noreturn __secondary_cpu_entry(void)
-{
-	struct cpu_thread *cpu = this_cpu();
-
-	/* Secondary CPU called in */
-	cpu_callin(cpu);
-
-	enable_machine_check();
-	mtmsrd(MSR_RI, 1);
-
-	/* Some XIVE setup */
-	xive_cpu_callin(cpu);
-
-	/* Wait for work to do */
-	while(true) {
-		if (cpu_check_jobs(cpu))
-			cpu_process_jobs();
-		else
-			cpu_idle_job();
-	}
-}
-
-/* Called from head.S, thus no prototype. */
-void secondary_cpu_entry(void);
-
-void __noreturn __nomcount secondary_cpu_entry(void)
-{
-	struct cpu_thread *cpu = this_cpu();
-
-	per_thread_sanity_checks();
-
-	prlog(PR_DEBUG, "INIT: CPU PIR 0x%04x called in\n", cpu->pir);
-
-	__secondary_cpu_entry();
-}
-#endif

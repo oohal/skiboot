@@ -50,6 +50,9 @@ static void phb3_init_hw(struct phb3 *p, bool first_init);
 
 #define PE_CAPP_EN 0x9013c03
 
+
+void print_debug_desc(const char *file, int line);
+
 #define PE_REG_OFFSET(p) \
 	((PHB3_IS_NAPLES(p) && (p)->index) ? 0x40 : 0x0)
 
@@ -3842,11 +3845,11 @@ static void phb3_init_ioda2(struct phb3 *p)
 	 * Init_17 - PELT-V BAR
 	 */
 	out_be64(p->regs + PHB_RTT_BAR,
-		 p->tbl_rtt | PHB_RTT_BAR_ENABLE);
+		 p->tbl_rtt_phys | PHB_RTT_BAR_ENABLE);
 	out_be64(p->regs + PHB_PELTV_BAR,
-		 p->tbl_peltv | PHB_PELTV_BAR_ENABLE);
+		 p->tbl_peltv_phys | PHB_PELTV_BAR_ENABLE);
 	out_be64(p->regs + PHB_IVT_BAR,
-		 p->tbl_ivt | 0x800 | PHB_IVT_BAR_ENABLE);
+		 p->tbl_ivt_phys | 0x800 | PHB_IVT_BAR_ENABLE);
 
 	/* DD2.0 or the subsequent chips don't have memory
 	 * resident RBA.
@@ -3855,7 +3858,7 @@ static void phb3_init_ioda2(struct phb3 *p)
 		out_be64(p->regs + PHB_RBA_BAR, 0x0ul);
 	else
 		out_be64(p->regs + PHB_RBA_BAR,
-			 p->tbl_rba | PHB_RBA_BAR_ENABLE);
+			 p->tbl_rba_phys | PHB_RBA_BAR_ENABLE);
 
 	/* Init_18..21 - Setup M32 */
 	out_be64(p->regs + PHB_M32_BASE_ADDR, p->mm1_base);
@@ -3864,7 +3867,7 @@ static void phb3_init_ioda2(struct phb3 *p)
 
 	/* Init_22 - Setup PEST BAR */
 	out_be64(p->regs + PHB_PEST_BAR,
-		 p->tbl_pest | PHB_PEST_BAR_ENABLE);
+		 p->tbl_pest_phys | PHB_PEST_BAR_ENABLE);
 
 	/* Init_23 - PCIE Outbound upper address */
 	out_be64(p->regs + PHB_M64_UPPER_BITS, 0);
@@ -4187,7 +4190,7 @@ static int64_t phb3_fixup_pec_inits(struct phb3 *p)
 	/* PCI Hardware Configuration 0 Register */
 	rc = xscom_read(p->chip_id, p->pe_xscom + 0x18, &val);
 	if (rc) {
-		PHBERR(p, "Can't read CS0 !\n");
+		PHBERR(p, "Can't read CS0  %llx!\n");
 		return rc;
 	}
 	val = val & 0x0f0fffffffffffffull;
@@ -4276,8 +4279,10 @@ static void phb3_init_hw(struct phb3 *p, bool first_init)
 	PHBDBG(p, "PHB_RESET is 0x%016llx\n", in_be64(p->regs + PHB_RESET));
 	out_be64(p->regs + PHB_RESET,			   0xd000000000000000UL);
 
+	print_debug_desc(__FILE__, __LINE__);
 	/* Architected IODA2 inits */
 	phb3_init_ioda2(p);
+	print_debug_desc(__FILE__, __LINE__);
 
 	/* Init_37..42 - Clear UTL & DLP error logs */
 	out_be64(p->regs + PHB_PCIE_UTL_ERRLOG1,	   0xffffffffffffffffUL);
@@ -4405,8 +4410,10 @@ static void phb3_init_hw(struct phb3 *p, bool first_init)
 	p->broken = true;
 }
 
-static void phb3_allocate_tables(struct phb3 *p)
+static void phb3_allocate_tables(struct dt_node *np)
 {
+	uint64_t tbl_peltv, tbl_rtt, tbl_pest, tbl_ivt, tbl_rba;
+	uint32_t chip_id = dt_get_chip_id(np);
 	uint16_t *rte;
 	uint32_t i;
 
@@ -4416,36 +4423,54 @@ static void phb3_allocate_tables(struct phb3 *p)
 	 * the memory and wastes space by always allocating twice
 	 * as much as requested (size + alignment)
 	 */
-	p->tbl_rtt = (uint64_t)local_alloc(p->chip_id, RTT_TABLE_SIZE, RTT_TABLE_SIZE);
-	assert(p->tbl_rtt);
-	rte = (uint16_t *)(p->tbl_rtt);
+	tbl_rtt = (uint64_t)local_alloc(chip_id, RTT_TABLE_SIZE, RTT_TABLE_SIZE);
+	assert(tbl_rtt);
+	rte = (uint16_t *)(tbl_rtt);
 	for (i = 0; i < RTT_TABLE_ENTRIES; i++, rte++)
 		*rte = PHB3_RESERVED_PE_NUM;
 
-	p->tbl_peltv = (uint64_t)local_alloc(p->chip_id, PELTV_TABLE_SIZE, PELTV_TABLE_SIZE);
-	assert(p->tbl_peltv);
-	memset((void *)p->tbl_peltv, 0, PELTV_TABLE_SIZE);
+	tbl_peltv = (uint64_t)local_alloc(chip_id, PELTV_TABLE_SIZE, PELTV_TABLE_SIZE);
+	assert(tbl_peltv);
+	memset((void *)tbl_peltv, 0, PELTV_TABLE_SIZE);
 
-	p->tbl_pest = (uint64_t)local_alloc(p->chip_id, PEST_TABLE_SIZE, PEST_TABLE_SIZE);
-	assert(p->tbl_pest);
-	memset((void *)p->tbl_pest, 0, PEST_TABLE_SIZE);
+	tbl_pest = (uint64_t)local_alloc(chip_id, PEST_TABLE_SIZE, PEST_TABLE_SIZE);
+	assert(tbl_pest);
+	memset((void *)tbl_pest, 0, PEST_TABLE_SIZE);
 
-	p->tbl_ivt = (uint64_t)local_alloc(p->chip_id, IVT_TABLE_SIZE, IVT_TABLE_SIZE);
-	assert(p->tbl_ivt);
-	memset((void *)p->tbl_ivt, 0, IVT_TABLE_SIZE);
+	tbl_ivt = (uint64_t)local_alloc(chip_id, IVT_TABLE_SIZE, IVT_TABLE_SIZE);
+	assert(tbl_ivt);
+	memset((void *)tbl_ivt, 0, IVT_TABLE_SIZE);
 
-	p->tbl_rba = (uint64_t)local_alloc(p->chip_id, RBA_TABLE_SIZE, RBA_TABLE_SIZE);
-	assert(p->tbl_rba);
-	memset((void *)p->tbl_rba, 0, RBA_TABLE_SIZE);
+	tbl_rba = (uint64_t)local_alloc(chip_id, RBA_TABLE_SIZE, RBA_TABLE_SIZE);
+	assert(tbl_rba);
+	memset((void *)tbl_rba, 0, RBA_TABLE_SIZE);
+
+	/* Indicators for variable tables */
+	dt_add_property_cells(np, "ibm,opal-rtt-table",
+		hi32(tbl_rtt), lo32(tbl_rtt), RTT_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-peltv-table",
+		hi32(tbl_peltv), lo32(tbl_peltv), PELTV_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-pest-table",
+		hi32(tbl_pest), lo32(tbl_pest), PEST_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-ivt-table",
+		hi32(tbl_ivt), lo32(tbl_ivt), IVT_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-ive-stride",
+		IVT_TABLE_STRIDE);
+	dt_add_property_cells(np, "ibm,opal-rba-table",
+		hi32(tbl_rba), lo32(tbl_rba), RBA_TABLE_SIZE);
 }
 
-static void phb3_add_properties(struct phb3 *p)
+static void phb3_add_properties(struct dt_node *np, uint32_t chip_id, int index)
 {
-	struct dt_node *np = p->phb.dt_node;
-	uint32_t lsibase, icsp = get_ics_phandle();
-	uint64_t m32b, m64b, m64s, reg, tkill;
+//	struct dt_node *np = p->phb.dt_node;
+	uint32_t icsp = get_ics_phandle();
+	uint64_t m32b, m64b, m64s, m32s, reg, tkill;
+	uint64_t base_msi =  PHB3_MSI_IRQ_BASE(chip_id, index); // need these
 
-	reg = cleanup_addr((uint64_t)p->regs);
+	reg = ((uint64_t)dt_get_address(np, 0, NULL)) & ~0x0003000000000000;
+
+	m64b = dt_read_address(np, "ibm,mmio-window", 2, 2, 0, &m64s);
+	m32b = dt_read_address(np, "ibm,mmio-window", 2, 2, 1, &m32s);
 
 	/* Add various properties that HB doesn't have to
 	 * add, some of them simply because they result from
@@ -4461,18 +4486,12 @@ static void phb3_add_properties(struct phb3 *p)
 
 	dt_add_property_cells(np, "interrupt-parent", icsp);
 
-	/* XXX FIXME: add slot-name */
-	//dt_property_cell("bus-width", 8); /* Figure it out from VPD ? */
-
 	/* "ranges", we only expose M32 (PHB3 doesn't do IO)
 	 *
 	 * Note: The kernel expects us to have chopped of 64k from the
 	 * M32 size (for the 32-bit MSIs). If we don't do that, it will
 	 * get confused (OPAL does it)
 	 */
-	m32b = cleanup_addr(p->mm1_base);
-	m64b = cleanup_addr(p->mm0_base);
-	m64s = p->mm0_size;
 	dt_add_property_cells(np, "ranges",
 			      /* M32 space */
 			      0x02000000, 0x00000000, M32_PCI_START,
@@ -4486,7 +4505,7 @@ static void phb3_add_properties(struct phb3 *p)
 	dt_add_property_cells(np, "ibm,opal-reserved-pe",
 			      PHB3_RESERVED_PE_NUM);
 	dt_add_property_cells(np, "ibm,opal-msi-ranges",
-			      p->base_msi, PHB3_MSI_IRQ_COUNT);
+			      base_msi, PHB3_MSI_IRQ_COUNT);
 	tkill = reg + PHB_TCE_KILL;
 	dt_add_property_cells(np, "ibm,opal-tce-kill",
 			      hi32(tkill), lo32(tkill));
@@ -4505,84 +4524,55 @@ static void phb3_add_properties(struct phb3 *p)
 	/* Indicate to Linux that CAPP timebase sync is supported */
 	dt_add_property_string(np, "ibm,capp-timebase-sync", NULL);
 
-	/* The interrupt maps will be generated in the RC node by the
-	 * PCI code based on the content of this structure:
-	 */
-	lsibase = p->base_lsi;
-	p->phb.lstate.int_size = 2;
-	p->phb.lstate.int_val[0][0] = lsibase + PHB3_LSI_PCIE_INTA;
-	p->phb.lstate.int_val[0][1] = 1;
-	p->phb.lstate.int_val[1][0] = lsibase + PHB3_LSI_PCIE_INTB;
-	p->phb.lstate.int_val[1][1] = 1;
-	p->phb.lstate.int_val[2][0] = lsibase + PHB3_LSI_PCIE_INTC;
-	p->phb.lstate.int_val[2][1] = 1;
-	p->phb.lstate.int_val[3][0] = lsibase + PHB3_LSI_PCIE_INTD;
-	p->phb.lstate.int_val[3][1] = 1;
-	p->phb.lstate.int_parent[0] = icsp;
-	p->phb.lstate.int_parent[1] = icsp;
-	p->phb.lstate.int_parent[2] = icsp;
-	p->phb.lstate.int_parent[3] = icsp;
-
-	/* Indicators for variable tables */
-	dt_add_property_cells(np, "ibm,opal-rtt-table",
-		hi32(p->tbl_rtt), lo32(p->tbl_rtt), RTT_TABLE_SIZE);
-	dt_add_property_cells(np, "ibm,opal-peltv-table",
-		hi32(p->tbl_peltv), lo32(p->tbl_peltv), PELTV_TABLE_SIZE);
-	dt_add_property_cells(np, "ibm,opal-pest-table",
-		hi32(p->tbl_pest), lo32(p->tbl_pest), PEST_TABLE_SIZE);
-	dt_add_property_cells(np, "ibm,opal-ivt-table",
-		hi32(p->tbl_ivt), lo32(p->tbl_ivt), IVT_TABLE_SIZE);
-	dt_add_property_cells(np, "ibm,opal-ive-stride",
-		IVT_TABLE_STRIDE);
-	dt_add_property_cells(np, "ibm,opal-rba-table",
-		hi32(p->tbl_rba), lo32(p->tbl_rba), RBA_TABLE_SIZE);
-
 	dt_add_property_cells(np, "ibm,phb-diag-data-size",
 			      sizeof(struct OpalIoPhb3ErrorData));
 }
 
-static bool phb3_calculate_windows(struct phb3 *p)
+static void phb3_mmio_window_fixup(struct dt_node *dn)
 {
+	uint64_t mm0_base, mm0_size, mm1_base, mm1_size;
 	const struct dt_property *prop;
 
 	/* Get PBCQ MMIO windows from device-tree */
-	prop = dt_require_property(p->phb.dt_node,
-				   "ibm,mmio-window", -1);
+	prop = dt_require_property(dn, "ibm,mmio-window", -1);
 	assert(prop->len >= (2 * sizeof(uint64_t)));
 
-	p->mm0_base = ((const uint64_t *)prop->prop)[0];
-	p->mm0_size = ((const uint64_t *)prop->prop)[1];
+	mm0_base = ((const uint64_t *)prop->prop)[0];
+	mm0_size = ((const uint64_t *)prop->prop)[1];
 	if (prop->len > 16) {
-		p->mm1_base = ((const uint64_t *)prop->prop)[2];
-		p->mm1_size = ((const uint64_t *)prop->prop)[3];
+		mm1_base = ((const uint64_t *)prop->prop)[2];
+		mm1_size = ((const uint64_t *)prop->prop)[3];
 	}
 
 	/* Sort them so that 0 is big and 1 is small */
-	if (p->mm1_size && p->mm1_size > p->mm0_size) {
-		uint64_t b = p->mm0_base;
-		uint64_t s = p->mm0_size;
-		p->mm0_base = p->mm1_base;
-		p->mm0_size = p->mm1_size;
-		p->mm1_base = b;
-		p->mm1_size = s;
+	if (mm1_size && mm1_size > mm0_size) {
+		uint64_t b = mm0_base;
+		uint64_t s = mm0_size;
+		mm0_base = mm1_base;
+		mm0_size = mm1_size;
+		mm1_base = b;
+		mm1_size = s;
 	}
 
 	/* If 1 is too small, ditch it */
-	if (p->mm1_size < M32_PCI_SIZE)
-		p->mm1_size = 0;
+	if (mm1_size < M32_PCI_SIZE)
+		mm1_size = 0;
 
 	/* If 1 doesn't exist, carve it out of 0 */
-	if (p->mm1_size == 0) {
-		p->mm0_size /= 2;
-		p->mm1_base = p->mm0_base + p->mm0_size;
-		p->mm1_size = p->mm0_size;
+	if (mm1_size == 0) {
+		mm0_size /= 2;
+		mm1_base = mm0_base + mm0_size;
+		mm1_size = mm0_size;
 	}
 
 	/* Crop mm1 to our desired size */
-	if (p->mm1_size > M32_PCI_SIZE)
-		p->mm1_size = M32_PCI_SIZE;
+	if (mm1_size > M32_PCI_SIZE)
+		mm1_size = M32_PCI_SIZE;
 
-	return true;
+	// now re-add them, property sorted
+	dt_del_property(dn, (struct dt_property *) prop);
+	dt_add_property_u64s(dn, "ibm,mmio-window",
+		mm0_base, mm0_size, mm1_base, mm1_size);
 }
 
 /*
@@ -4633,13 +4623,14 @@ static void phb3_create(struct dt_node *np)
 	struct proc_chip *chip;
 	int opal_id;
 	char *path;
+	uint32_t icsp = get_ics_phandle();
 
 	assert(p);
 
 	/* Populate base stuff */
 	p->index = dt_prop_get_u32(np, "ibm,phb-index");
 	p->chip_id = dt_prop_get_u32(np, "ibm,chip-id");
-	p->regs = (void *)dt_get_address(np, 0, NULL);
+	p->regs = (void *)((uint64_t)dt_get_address(np, 0, NULL) & ~0x0003000000000000);
 	p->base_msi = PHB3_MSI_IRQ_BASE(p->chip_id, p->index);
 	p->base_lsi = PHB3_LSI_IRQ_BASE(p->chip_id, p->index);
 	p->phb.dt_node = np;
@@ -4647,8 +4638,11 @@ static void phb3_create(struct dt_node *np)
 	p->phb.phb_type = phb_type_pcie_v3;
 	p->phb.scan_map = 0x1; /* Only device 0 to scan */
 
-	if (!phb3_calculate_windows(p))
-		return;
+//	if (!phb3_calculate_windows(p))
+//		return;
+
+	p->mm0_base = dt_read_address(np, "ibm,mmio-window", 2, 2, 0, &p->mm0_size);
+	p->mm1_base = dt_read_address(np, "ibm,mmio-window", 2, 2, 1, &p->mm1_size);
 
 	/* Get the various XSCOM register bases from the device-tree */
 	prop = dt_require_property(np, "ibm,xscom-bases", 3 * sizeof(uint32_t));
@@ -4747,23 +4741,60 @@ static void phb3_create(struct dt_node *np)
 	}
 #endif
 	/* Allocate the SkiBoot internal in-memory tables for the PHB */
-	phb3_allocate_tables(p);
+	//phb3_allocate_tables(p); phb3
+	print_debug_desc(__FILE__, __LINE__);
 
-	phb3_add_properties(p);
+	p->tbl_rtt_phys = dt_read_address(np, "ibm,opal-rtt-table", 2, 1, 0, NULL);
+	p->tbl_peltv_phys = dt_read_address(np, "ibm,opal-peltv-table", 2, 1, 0, NULL);
+	p->tbl_pest_phys = dt_read_address(np, "ibm,opal-pest-table", 2, 1, 0, NULL);
+	p->tbl_ivt_phys = dt_read_address(np, "ibm,opal-ivt-table", 2, 1, 0, NULL);
+	p->tbl_rba_phys = dt_read_address(np, "ibm,opal-rba-table", 2, 1, 0, NULL);
+
+	/*
+	 * stupid hack to work around the user mode virtual memory being
+	 * limited to 512TB
+	 */
+	p->tbl_rtt = p->tbl_rtt_phys;
+	p->tbl_peltv = p->tbl_peltv_phys;
+	p->tbl_pest = p->tbl_pest_phys;
+	p->tbl_ivt = p->tbl_ivt_phys;
+	p->tbl_rba = p->tbl_rba_phys;
+	print_debug_desc(__FILE__, __LINE__);
+
+	/* The interrupt maps will be generated in the RC node by the
+	 * PCI code based on the content of this structure:
+	 */
+	p->phb.lstate.int_size = 2;
+	p->phb.lstate.int_val[0][0] = p->base_lsi + PHB3_LSI_PCIE_INTA;
+	p->phb.lstate.int_val[0][1] = 1;
+	p->phb.lstate.int_val[1][0] = p->base_lsi + PHB3_LSI_PCIE_INTB;
+	p->phb.lstate.int_val[1][1] = 1;
+	p->phb.lstate.int_val[2][0] = p->base_lsi + PHB3_LSI_PCIE_INTC;
+	p->phb.lstate.int_val[2][1] = 1;
+	p->phb.lstate.int_val[3][0] = p->base_lsi + PHB3_LSI_PCIE_INTD;
+	p->phb.lstate.int_val[3][1] = 1;
+	p->phb.lstate.int_parent[0] = icsp;
+	p->phb.lstate.int_parent[1] = icsp;
+	p->phb.lstate.int_parent[2] = icsp;
+	p->phb.lstate.int_parent[3] = icsp;
+	print_debug_desc(__FILE__, __LINE__);
 
 	/* Clear IODA2 cache */
 	phb3_init_ioda_cache(p);
+	print_debug_desc(__FILE__, __LINE__);
 
 	/* Register interrupt sources */
 	register_irq_source(&phb3_msi_irq_ops, p, p->base_msi,
 			    PHB3_MSI_IRQ_COUNT);
 	register_irq_source(&phb3_lsi_irq_ops, p, p->base_lsi, 8);
+	print_debug_desc(__FILE__, __LINE__);
 
 	/* Get the HW up and running */
 	phb3_init_hw(p, true);
+	print_debug_desc(__FILE__, __LINE__);
 
 	/* Load capp microcode into capp unit */
-	load_capp_ucode(p);
+	//load_capp_ucode(p);
 
 	opal_add_host_sync_notifier(phb3_host_sync_reset, p);
 
@@ -4912,6 +4943,8 @@ static void phb3_probe_pbcq(struct dt_node *pbcq)
 	reg[0] = phb_bar;
 	reg[1] = 0x1000;
 
+	print_debug_desc(__FILE__, __LINE__);
+
 	np = dt_new_addr(dt_root, "pciex", reg[0]);
 	if (!np)
 		return;
@@ -4958,20 +4991,30 @@ static void phb3_probe_pbcq(struct dt_node *pbcq)
 			      OPAL_PHB_CAPI_FLAG_SNOOP_CONTROL);
 
 	add_chip_dev_associativity(np);
+
+	// allocate the various in-memory phb tables and add them to the DT
+	phb3_allocate_tables(np);
+
+	phb3_add_properties(np, gcid, pno);
+	phb3_mmio_window_fixup(np);
 }
 
 
 void probe_phb3(void)
 {
 	struct dt_node *np;
-
+#if 0
 	/* Look for PBCQ XSCOM nodes */
 	dt_for_each_compatible(dt_root, np, "ibm,power8-pbcq")
 		phb3_probe_pbcq(np);
+#endif
 
 	/* Look for newly created PHB nodes */
-	dt_for_each_compatible(dt_root, np, "ibm,power8-pciex")
+	dt_for_each_compatible(dt_root, np, "ibm,power8-pciex") {
+		print_debug_desc(__FILE__, __LINE__);
 		phb3_create(np);
+	}
+
 }
 
 

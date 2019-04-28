@@ -83,14 +83,14 @@ static uint64_t xscom_wait_done(void)
 	uint64_t hmer;
 
 	do
-		hmer = mfspr(SPR_HMER);
+		hmer = SPR_HMER_XSCOM_DONE; //  mfspr(SPR_HMER);
 	while(!(hmer & SPR_HMER_XSCOM_DONE));
 
 	/*
 	 * HW822317: We need to read a second time as the actual
 	 * status can be delayed by 1 cycle after DONE
 	 */
-	return mfspr(SPR_HMER);
+	return hmer; //mfspr(SPR_HMER);
 }
 
 static void xscom_reset(uint32_t gcid, bool need_delay)
@@ -100,7 +100,7 @@ static void xscom_reset(uint32_t gcid, bool need_delay)
 	struct timespec ts;
 
 	/* Clear errors in HMER */
-	mtspr(SPR_HMER, HMER_CLR_MASK);
+	//mtspr(SPR_HMER, HMER_CLR_MASK);
 
 	/* Setup local and target scom addresses */
 	if (proc_gen == proc_gen_p9) {
@@ -195,7 +195,7 @@ static int xscom_clear_error(uint32_t gcid, uint32_t pcb_addr)
 	xscom_reset(gcid, true);
 
 	/* Clear errors in HMER */
-	mtspr(SPR_HMER, HMER_CLR_MASK);
+	//mtspr(SPR_HMER, HMER_CLR_MASK);
 
 	/* Write 0 to clear the xscom logic errors on target chip */
 	out_be64(xscom_addr(gcid, xscom_clear_reg), 0);
@@ -337,13 +337,14 @@ static int __xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
 		/* Clear status bits in HMER (HMER is special
 		 * writing to it *ands* bits
 		 */
-		mtspr(SPR_HMER, HMER_CLR_MASK);
+	//	mtspr(SPR_HMER, HMER_CLR_MASK);
 
 		/* Read value from SCOM */
 		*val = in_be64(xscom_addr(gcid, pcb_addr));
 
 		/* Wait for done bit */
-		hmer = xscom_wait_done();
+		hmer = SPR_HMER_XSCOM_DONE;
+		//hmer = xscom_wait_done();
 
 		/* Check for error */
 		if (!(hmer & SPR_HMER_XSCOM_FAIL))
@@ -389,7 +390,7 @@ static int __xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 		/* Clear status bits in HMER (HMER is special
 		 * writing to it *ands* bits
 		 */
-		mtspr(SPR_HMER, HMER_CLR_MASK);
+		//mtspr(SPR_HMER, HMER_CLR_MASK);
 
 		/* Write value to SCOM */
 		out_be64(xscom_addr(gcid, pcb_addr), val);
@@ -593,8 +594,8 @@ int _xscom_read(uint32_t partid, uint64_t pcb_addr, uint64_t *val, bool take_loc
 	uint32_t gcid;
 	int rc;
 
-	if (!opal_addr_valid(val))
-		return OPAL_PARAMETER;
+//	if (!opal_addr_valid(val))
+//		return OPAL_PARAMETER;
 
 	/* Due to a bug in some versions of the PRD wrapper app, errors
 	 * might not be properly forwarded to PRD, in which case the data
@@ -871,7 +872,7 @@ void xscom_init(void)
 		reg = dt_find_property(xn, "reg");
 		assert(reg);
 
-		chip->xscom_base = dt_translate_address(xn, 0, NULL);
+		chip->xscom_base = dt_translate_address(xn, 0, NULL) & ~0x0003000000000000;
 
 		/* Grab processor type and EC level */
 		xscom_init_chip_info(chip);

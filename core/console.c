@@ -29,7 +29,7 @@
 
 extern long __memcons_start;
 
-static char *con_buf = (char *) &__memcons_start;
+static char *con_buf = (char *) INMEM_CON_START;
 static size_t con_in;
 static size_t con_out;
 static bool con_wrapped;
@@ -45,8 +45,8 @@ static struct lock con_lock = LOCK_UNLOCKED;
 /* This is mapped via TCEs so we keep it alone in a page */
 struct memcons memcons __section(".data.memcons") = {
 	.magic		= MEMCONS_MAGIC,
-	.obuf_phys	= (u64) &__memcons_start,
-	.ibuf_phys	= (u64) &__memcons_start + INMEM_CON_OUT_LEN,
+	.obuf_phys	= INMEM_CON_START,
+	.ibuf_phys	= INMEM_CON_START + INMEM_CON_OUT_LEN,
 	.obuf_size	= INMEM_CON_OUT_LEN,
 	.ibuf_size	= INMEM_CON_IN_LEN,
 };
@@ -255,7 +255,7 @@ ssize_t console_write(bool flush_to_drivers, const void *buf, size_t count)
 		write_char(c);
 	}
 
-	__flush_console(flush_to_drivers, need_unlock);
+	__flush_console(true, need_unlock);
 
 	if (need_unlock)
 		unlock(&con_lock);

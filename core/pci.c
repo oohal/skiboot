@@ -1074,7 +1074,7 @@ int64_t pci_register_phb(struct phb *phb, int opal_id)
 	phb->opal_id = opal_id;
 	if (opal_id > last_phb_id)
 		last_phb_id = opal_id;
-	dt_add_property_cells(phb->dt_node, "ibm,opal-phbid", 0, phb->opal_id);
+//	dt_add_property_cells(phb->dt_node, "ibm,opal-phbid", 0, phb->opal_id);
 	PCIDBG(phb, 0, "PCI: Registered PHB\n");
 
 	init_lock(&phb->lock);
@@ -1691,11 +1691,18 @@ static void pci_do_jobs(void (*fn)(void *))
 			continue;
 		}
 
+		PCIERR(phbs[i], 0, "doing the thing\n");
+		fn(phbs[i]);
+		PCIERR(phbs[i], 0, "done the thing\n");
+/*
 		jobs[i] = __cpu_queue_job(NULL, phbs[i]->dt_node->name,
 					  fn, phbs[i], false);
 		assert(jobs[i]);
-
+*/
 	}
+
+	free(jobs);
+	return;
 
 	/* If no secondary CPUs, do everything sync */
 	cpu_process_local_jobs();

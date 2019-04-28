@@ -232,6 +232,12 @@ struct phb3 {
 	uint64_t		tbl_ivt;
 	uint64_t		tbl_rba;
 
+	uint64_t		tbl_rtt_phys;
+	uint64_t		tbl_peltv_phys;
+	uint64_t		tbl_pest_phys;
+	uint64_t		tbl_ivt_phys;
+	uint64_t		tbl_rba_phys;
+
 	bool			skip_perst; /* Skip first perst */
 	bool			has_link;
 	int64_t			ecap;	    /* cached PCI-E cap offset */

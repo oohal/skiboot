@@ -362,6 +362,7 @@ static uint32_t p8_chip_id_bits(uint32_t chip)
 		break;
 
 	default:
+		prerror("chip type: %x\n", proc_chip->type);
 		/* This shouldn't be called on non-P8 based systems */
 		assert(0);
 		return 0;

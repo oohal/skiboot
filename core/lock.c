@@ -230,7 +230,7 @@ void lock_caller(struct lock *l, const char *owner)
 		return;
 	add_lock_request(l);
 
-#ifdef DEBUG_LOCKS
+#ifdef ASDFASDFASDFASF
 	/*
 	 * Ensure that we get a valid start value
 	 * as we may be handling TFMR errors and taking
