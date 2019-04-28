@@ -51,7 +51,6 @@ static void phb3_init_hw(struct phb3 *p, bool first_init);
 #define PE_CAPP_EN 0x9013c03
 
 
-void print_debug_desc(const char *file, int line);
 
 #define PE_REG_OFFSET(p) \
 	((PHB3_IS_NAPLES(p) && (p)->index) ? 0x40 : 0x0)
@@ -4279,10 +4278,8 @@ static void phb3_init_hw(struct phb3 *p, bool first_init)
 	PHBDBG(p, "PHB_RESET is 0x%016llx\n", in_be64(p->regs + PHB_RESET));
 	out_be64(p->regs + PHB_RESET,			   0xd000000000000000UL);
 
-	print_debug_desc(__FILE__, __LINE__);
 	/* Architected IODA2 inits */
 	phb3_init_ioda2(p);
-	print_debug_desc(__FILE__, __LINE__);
 
 	/* Init_37..42 - Clear UTL & DLP error logs */
 	out_be64(p->regs + PHB_PCIE_UTL_ERRLOG1,	   0xffffffffffffffffUL);
@@ -4742,7 +4739,6 @@ static void phb3_create(struct dt_node *np)
 #endif
 	/* Allocate the SkiBoot internal in-memory tables for the PHB */
 	//phb3_allocate_tables(p); phb3
-	print_debug_desc(__FILE__, __LINE__);
 
 	p->tbl_rtt_phys = dt_read_address(np, "ibm,opal-rtt-table", 2, 1, 0, NULL);
 	p->tbl_peltv_phys = dt_read_address(np, "ibm,opal-peltv-table", 2, 1, 0, NULL);
@@ -4759,7 +4755,6 @@ static void phb3_create(struct dt_node *np)
 	p->tbl_pest = p->tbl_pest_phys;
 	p->tbl_ivt = p->tbl_ivt_phys;
 	p->tbl_rba = p->tbl_rba_phys;
-	print_debug_desc(__FILE__, __LINE__);
 
 	/* The interrupt maps will be generated in the RC node by the
 	 * PCI code based on the content of this structure:
@@ -4777,21 +4772,17 @@ static void phb3_create(struct dt_node *np)
 	p->phb.lstate.int_parent[1] = icsp;
 	p->phb.lstate.int_parent[2] = icsp;
 	p->phb.lstate.int_parent[3] = icsp;
-	print_debug_desc(__FILE__, __LINE__);
 
 	/* Clear IODA2 cache */
 	phb3_init_ioda_cache(p);
-	print_debug_desc(__FILE__, __LINE__);
 
 	/* Register interrupt sources */
 	register_irq_source(&phb3_msi_irq_ops, p, p->base_msi,
 			    PHB3_MSI_IRQ_COUNT);
 	register_irq_source(&phb3_lsi_irq_ops, p, p->base_lsi, 8);
-	print_debug_desc(__FILE__, __LINE__);
 
 	/* Get the HW up and running */
 	phb3_init_hw(p, true);
-	print_debug_desc(__FILE__, __LINE__);
 
 	/* Load capp microcode into capp unit */
 	//load_capp_ucode(p);
@@ -4943,7 +4934,6 @@ static void phb3_probe_pbcq(struct dt_node *pbcq)
 	reg[0] = phb_bar;
 	reg[1] = 0x1000;
 
-	print_debug_desc(__FILE__, __LINE__);
 
 	np = dt_new_addr(dt_root, "pciex", reg[0]);
 	if (!np)
@@ -5010,11 +5000,7 @@ void probe_phb3(void)
 #endif
 
 	/* Look for newly created PHB nodes */
-	dt_for_each_compatible(dt_root, np, "ibm,power8-pciex") {
-		print_debug_desc(__FILE__, __LINE__);
+	dt_for_each_compatible(dt_root, np, "ibm,power8-pciex")
 		phb3_create(np);
-	}
-
 }
-
 
