@@ -1237,8 +1237,11 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 	probe_npu();
 	probe_npu2();
 
-	/* Initialize PCI */
-	pci_init_slots();
+	/*
+	 * Don't initialize PCI, we're leaving the phb's untouched so userspace
+	 * can poke at them in-impeded
+	 */
+//	pci_init_slots();
 
 	/* Add OPAL timer related properties */
 	late_init_timers();
