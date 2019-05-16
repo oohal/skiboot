@@ -2881,7 +2881,7 @@ static unsigned int phb4_get_max_link_speed(struct phb4 *p, struct dt_node *np)
 static void phb4_assert_perst(struct pci_slot *slot, bool assert)
 {
 	struct phb4 *p = phb_to_phb4(slot->phb);
-	uint16_t linkctl;
+	uint16_t linkctl, loff = p->ecap + PCICAP_EXP_LCTL;
 	uint64_t reg;
 
 	/*
@@ -2891,19 +2891,23 @@ static void phb4_assert_perst(struct pci_slot *slot, bool assert)
 	 * disable bit before asserting PERST. Asserting the secondary reset
 	 * bit in the btctl register also works.
 	 */
-	phb4_pcicfg_read16(&p->phb, 0, p->ecap + PCICAP_EXP_LCTL, &linkctl);
+	phb4_pcicfg_read16(&p->phb, 0, loff, &linkctl);
 	reg = in_be64(p->regs + PHB_PCIE_CRESET);
 
 	if (assert) {
 		linkctl |= PCICAP_EXP_LCTL_LINK_DIS;
 		reg &= ~PHB_PCIE_CRESET_PERST_N;
+
+		phb4_pcicfg_write16(&p->phb, 0, loff, linkctl);
+		out_be64(p->regs + PHB_PCIE_CRESET, reg);
 	} else {
 		linkctl &= ~PCICAP_EXP_LCTL_LINK_DIS;
 		reg |= PHB_PCIE_CRESET_PERST_N;
-	}
 
-	out_be64(p->regs + PHB_PCIE_CRESET, reg);
-	phb4_pcicfg_write16(&p->phb, 0, p->ecap + PCICAP_EXP_LCTL, linkctl);
+		/* lift perst, then clear LINK_DIS */
+		out_be64(p->regs + PHB_PCIE_CRESET, reg);
+		phb4_pcicfg_write16(&p->phb, 0, loff, linkctl);
+	}
 }
 
 static int64_t phb4_hreset(struct pci_slot *slot)
