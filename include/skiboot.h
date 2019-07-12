@@ -1,4 +1,4 @@
-/* Copyright 2013-2014 IBM Corp.
+/* Copyright 2013-2019 IBM Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -224,6 +224,7 @@ extern int flash_start_preload_resource(enum resource_id id, uint32_t subid,
 extern int flash_resource_loaded(enum resource_id id, uint32_t idx);
 extern bool flash_reserve(void);
 extern void flash_release(void);
+extern bool flash_unregister(void);
 #define FLASH_SUBPART_ALIGNMENT 0x1000
 #define FLASH_SUBPART_HEADER_SIZE FLASH_SUBPART_ALIGNMENT
 extern int flash_subpart_info(void *part_header, uint32_t header_len,
