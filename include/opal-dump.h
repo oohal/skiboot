@@ -1,4 +1,4 @@
-/* Copyright 2013-2014 IBM Corp.
+/* Copyright 2013-2019 IBM Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  */
 
 
-#ifndef __FSPMDST_H
-#define __FSPMDST_H
+#ifndef __OPAL_DUMP_H
+#define __OPAL_DUMP_H
 
 /*
  * Dump region ids
@@ -39,10 +39,10 @@
  * Format of this table is same as Memory Dump Source Table (MDST)
  * defined in HDAT spec.
  */
-struct dump_mdst_table {
+struct mdst_table {
 	__be64	addr;
-	__be32	type; /* DUMP_SECTION_* */
+	__be32	type; /* DUMP_REGION_* */
 	__be32	size;
 };
 
-#endif	/* __FSPMDST_H */
+#endif	/* __OPAL_DUMP_H */

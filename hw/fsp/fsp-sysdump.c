@@ -1,4 +1,4 @@
-/* Copyright 2013-2014 IBM Corp.
+/* Copyright 2013-2019 IBM Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@
 #include <lock.h>
 #include <skiboot.h>
 #include <errorlog.h>
-#include <fsp-mdst-table.h>
+#include <opal-dump.h>
 
 /*
  * Sapphire dump size
@@ -60,8 +60,8 @@ DEFINE_LOG_ENTRY(OPAL_RC_DUMP_MDST_REMOVE, OPAL_PLATFORM_ERR_EVT, OPAL_DUMP,
 		 OPAL_PLATFORM_FIRMWARE, OPAL_INFO, OPAL_NA);
 
 
-static struct dump_mdst_table *mdst_table;
-static struct dump_mdst_table *dump_mem_region;
+static struct mdst_table *mdst_table;
+static struct mdst_table *dump_mem_region;
 
 static int cur_mdst_entry;
 static int max_mdst_entry;
