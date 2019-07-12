@@ -1,4 +1,4 @@
-/* Copyright 2013-2018 IBM Corp.
+/* Copyright 2013-2019 IBM Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,6 +88,11 @@ SECTIONS
 	. = MDST_TABLE_OFF;
 	.mdst : {
 		KEEP(*(.mdst.data))
+	}
+
+	. = MDDT_TABLE_OFF;
+	.mddt : {
+		KEEP(*(.mddt.data))
 	}
 
 	. = CPU_CTL_OFF;
