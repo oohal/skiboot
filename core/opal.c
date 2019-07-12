@@ -1,4 +1,4 @@
-/* Copyright 2013-2014 IBM Corp.
+/* Copyright 2013-2019 IBM Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -384,6 +384,7 @@ void add_opal_node(void)
 {
 	uint64_t base, entry, size;
 	extern uint32_t opal_entry;
+	extern uint32_t boot_entry;
 	struct dt_node *opal_event;
 
 	/* XXX TODO: Reorg this. We should create the base OPAL
@@ -413,6 +414,7 @@ void add_opal_node(void)
 	dt_add_property_cells(opal_node, "opal-msg-size", OPAL_MSG_SIZE);
 	dt_add_property_u64(opal_node, "opal-base-address", base);
 	dt_add_property_u64(opal_node, "opal-entry-address", entry);
+	dt_add_property_u64(opal_node, "opal-boot-address", (uint64_t)&boot_entry);
 	dt_add_property_u64(opal_node, "opal-runtime-size", size);
 
 	/* Add irqchip interrupt controller */
