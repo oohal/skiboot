@@ -1,4 +1,4 @@
-/* Copyright 2013-2016 IBM Corp.
+/* Copyright 2013-2019 IBM Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 
+#include <stdlib.h>
 #include <skiboot.h>
 #include <opal.h>
 #include <console.h>
@@ -110,6 +111,11 @@ static int64_t opal_cec_reboot2(uint32_t reboot_type, char *diag)
 	case OPAL_REBOOT_FULL_IPL:
 		disable_fast_reboot("full IPL reboot requested");
 		return opal_cec_reboot();
+	case OPAL_REBOOT_MPIPL:
+		prlog(PR_NOTICE, "Reboot: OS reported error. Performing MPIPL\n");
+		console_complete_flush();
+		_abort("Reboot: OS reported error. Performing MPIPL\n");
+		break;
 	default:
 		prlog(PR_NOTICE, "OPAL: Unsupported reboot request %d\n", reboot_type);
 		return OPAL_UNSUPPORTED;
