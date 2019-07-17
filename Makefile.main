@@ -258,17 +258,8 @@ ALL_OBJS = $(OBJS) version.o
 ALL_OBJS_1 = $(TARGET).tmp.a asm/dummy_map.o
 ALL_OBJS_2 = $(TARGET).tmp.a asm/real_map.o
 
-$(TARGET).lid.xz: $(TARGET).lid
-	$(call Q,XZ, cat $^ | xz -9 -C crc32 > $@, $@)
-
 $(TARGET).lid: $(TARGET).elf
 	$(call Q,OBJCOPY, $(OBJCOPY) -O binary -S $^ $@, $@)
-
-$(TARGET).lid.stb: $(TARGET).lid libstb/create-container
-	$(call Q,STB-DEVELOPMENT-SIGNED-CONTAINER,$(SRC)/libstb/sign-with-local-keys.sh $< $@ $(SRC)/libstb/keys/ PAYLOAD,$@)
-
-$(TARGET).lid.xz.stb: $(TARGET).lid.xz libstb/create-container
-	$(call Q,STB-DEVELOPMENT-SIGNED-CONTAINER,$(SRC)/libstb/sign-with-local-keys.sh $< $@ $(SRC)/libstb/keys/ PAYLOAD,$@)
 
 $(TARGET).tmp.a: $(ALL_OBJS)
 	@rm -f $(TARGET).tmp.a

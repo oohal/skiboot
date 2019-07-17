@@ -76,3 +76,9 @@ endif
 
 %.map: %.elf
 	$(call Q,NM, $(NM) --synthetic -n $< | grep -v '\( [aNUw] \)\|\(__crc_\)\|\( \$[adt]\)' > $@, $@)
+
+%.xz: %
+	$(call Q,XZ, cat $^ | xz -9 -C crc32 > $@, $@)
+
+%.stb: % libstb/create-container
+	$(call Q,STB-DEVELOPMENT-SIGNED-CONTAINER,$(SRC)/libstb/sign-with-local-keys.sh $< $@ $(SRC)/libstb/keys/ PAYLOAD,$@)
