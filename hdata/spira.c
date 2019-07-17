@@ -1093,7 +1093,7 @@ static void add_iplparams_sys_params(const void *iplp, struct dt_node *node)
 		dt_add_property(node, "elevated-risk-level", NULL, 0);
 
 	/* Populate OPAL dump node */
-	if (sys_attributes & SYS_ATTR_MPIPL_SUPPORTED)
+//	if (sys_attributes & SYS_ATTR_MPIPL_SUPPORTED)
 		add_opal_dump_node();
 
 	if (version >= 0x60 && proc_gen >= proc_gen_p9)
