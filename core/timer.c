@@ -26,7 +26,7 @@
 #endif
 
 /* Heartbeat requested from Linux */
-#define HEARTBEAT_DEFAULT_MS	200
+#define HEARTBEAT_DEFAULT_MS	1
 
 static struct lock timer_lock = LOCK_UNLOCKED;
 static LIST_HEAD(timer_list);
