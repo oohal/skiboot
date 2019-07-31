@@ -1230,7 +1230,10 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 	/* Probe NPUs */
 	probe_npu();
 	probe_npu2();
-	probe_npu3();
+
+	if (nvram_query_eq_dangerous("npu3-probe", "true")) {
+		probe_npu3();
+	}
 
 	/* Initialize PCI */
 	pci_init_slots();
