@@ -203,7 +203,7 @@ static struct dt_node *io_add_phb4(const struct cechub_io_hub *hub,
 {
 	struct dt_node *pbcq;
 	uint32_t reg[4];
-	uint8_t active_phb_mask = hub->fab_br0_pdt;
+	uint8_t active_phb_mask = 0xff; // try scan every phb, if it's disabled then we'll barf on it
 	uint32_t pe_xscom  = 0x4010c00 + (pec_index * 0x0000400);
 	uint32_t pci_xscom = 0xd010800 + (pec_index * 0x1000000);
 	int i;
