@@ -224,6 +224,9 @@ extern int _xscom_read(uint32_t partid, uint64_t pcb_addr, uint64_t *val, bool t
 extern int _xscom_write(uint32_t partid, uint64_t pcb_addr, uint64_t val, bool take_lock);
 extern void _xscom_unlock(void);
 
+#define XSCOM_TRACE_READS 0x1
+#define XSCOM_TRACE_WRITES 0x2
+extern uint32_t xscom_trace;
 
 /* Targeted SCOM access */
 static inline int xscom_read(uint32_t partid, uint64_t pcb_addr, uint64_t *val)

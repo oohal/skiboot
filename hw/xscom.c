@@ -379,6 +379,8 @@ static int __xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
 	return ret;
 }
 
+uint32_t xscom_trace;
+
 static int __xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 {
 	uint64_t hmer;
@@ -642,6 +644,10 @@ int _xscom_read(uint32_t partid, uint64_t pcb_addr, uint64_t *val, bool take_loc
 	else
 		rc = __xscom_read(gcid, pcb_addr & 0x7fffffff, val);
 
+	if (xscom_trace & XSCOM_TRACE_READS) {
+		prerror("XSCOMTRACE: gcid:%x, addr:%016llx: Read %016llx\n", gcid, pcb_addr, *val);
+	}
+
 	/* Unlock it */
 	if (take_lock)
 		unlock(&xscom_lock);
@@ -686,6 +692,10 @@ int _xscom_write(uint32_t partid, uint64_t pcb_addr, uint64_t val, bool take_loc
 		rc = xscom_indirect_write(gcid, pcb_addr, val);
 	else
 		rc = __xscom_write(gcid, pcb_addr & 0x7fffffff, val);
+
+	if (xscom_trace & XSCOM_TRACE_WRITES) {
+		prerror("XSCOMTRACE: gcid:%x, addr:%016llx: Wrote %016llx\n", gcid, pcb_addr, val);
+	}
 
 	/* Unlock it */
 	if (take_lock)
