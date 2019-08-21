@@ -22,6 +22,7 @@
 #include <pci-quirk.h>
 #include <timebase.h>
 #include <device.h>
+#include <xscom.h>
 
 #define MAX_PHB_ID	256
 static struct phb *phbs[MAX_PHB_ID];
@@ -1701,6 +1702,26 @@ void __noinline pci_add_device_nodes(struct phb *phb,
 
 static void pci_do_jobs(void (*fn)(void *))
 {
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(phbs); i++) {
+		if (!phbs[i])
+			continue;
+
+		if (phbs[i]->phb_type == phb_type_npu_v2_opencapi) {
+			prerror("XSCOMTRACE: Started tracing for linkup of PHB#%04x\n", phbs[i]->opal_id);
+			xscom_trace = 0x3;
+		}
+
+		fn(phbs[i]);
+
+		xscom_trace = 0x0;
+		if (phbs[i]->phb_type == phb_type_npu_v2_opencapi) {
+			prerror("XSCOMTRACE: Finished tracing for linkup of PHB#%04x\n", phbs[i]->opal_id);
+		}
+	}
+
+#if 0
 	struct cpu_job **jobs;
 	int i;
 
@@ -1729,6 +1750,7 @@ static void pci_do_jobs(void (*fn)(void *))
 		cpu_wait_job(jobs[i], true);
 	}
 	free(jobs);
+#endif
 }
 
 static void __pci_init_slots(void)

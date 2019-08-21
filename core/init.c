@@ -1234,7 +1234,12 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 
 	/* Probe NPUs */
 	probe_npu();
+
+	prerror("XSCOMTRACE: Enabling before npu2_probe()\n");
+	xscom_trace = 0x3;
 	probe_npu2();
+	xscom_trace = 0x0;
+	prerror("XSCOMTRACE: Disabling after npu2_probe()\n");
 
 	/* Initialize PCI */
 	pci_init_slots();
