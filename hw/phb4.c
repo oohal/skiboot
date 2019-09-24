@@ -5498,13 +5498,18 @@ static bool phb4_calculate_windows(struct phb4 *p)
 static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 {
 	struct phb4 *p = is->data;
+	uint32_t idx = isn - p->base_lsi;
+	static int x[8];
 
-	PHBDBG(p, "Got interrupt 0x%08x\n", isn);
+	if (idx == PHB4_LSI_PCIE_INF)
+		prlog(PR_DEBUG, "phb#%04x-inf\n", p->phb.opal_id);
+	else if (idx == PHB4_LSI_PCIE_ER)
+		prlog(PR_DEBUG, "phb#%04x-err\n", p->phb.opal_id);
+	else
+		prlog(PR_DEBUG, "phb#%04x-lsi%d\n", p->phb.opal_id, idx);
 
-#if 0
 	/* Update pending event */
-	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR,
-				OPAL_EVENT_PCI_ERROR);
+	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR, OPAL_EVENT_PCI_ERROR);
 
 	/* If the PHB is broken, go away */
 	if (p->broken)
@@ -5514,26 +5519,44 @@ static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 	 * Mark the PHB has pending error so that the OS
 	 * can handle it at late point.
 	 */
-	phb3_set_err_pending(p, true);
-#endif
+	phb4_set_err_pending(p, true);
+
+	// stop IRQ floods
+	if (x[idx]++ > 1024)
+		xive_source_mask(is, isn);
 }
 
 static uint64_t phb4_lsi_attributes(struct irq_source *is __unused,
 				uint32_t isn __unused)
 {
-#ifndef DISABLE_ERR_INTS
 	struct phb4 *p = is->data;
 	uint32_t idx = isn - p->base_lsi;
 
 	if (idx == PHB4_LSI_PCIE_INF || idx == PHB4_LSI_PCIE_ER)
 		return IRQ_ATTR_TARGET_OPAL | IRQ_ATTR_TARGET_RARE | IRQ_ATTR_TYPE_LSI;
-#endif
 	return IRQ_ATTR_TARGET_LINUX;
+}
+
+static char *phb4_lsi_name(struct irq_source *is, uint32_t isn)
+{
+	struct phb4 *p = is->data;
+	uint32_t idx = isn - p->base_lsi;
+	char buf[32];
+
+	if (idx == PHB4_LSI_PCIE_INF)
+		snprintf(buf, 32, "phb#%04x-inf", p->phb.opal_id);
+	else if (idx == PHB4_LSI_PCIE_ER)
+		snprintf(buf, 32, "phb#%04x-err", p->phb.opal_id);
+	else
+		snprintf(buf, 32, "phb#%04x-lsi%d", p->phb.opal_id, idx);
+
+	return strdup(buf);
 }
 
 static const struct irq_source_ops phb4_lsi_ops = {
 	.interrupt = phb4_err_interrupt,
 	.attributes = phb4_lsi_attributes,
+	.name = phb4_lsi_name,
 };
 
 #ifdef HAVE_BIG_ENDIAN
