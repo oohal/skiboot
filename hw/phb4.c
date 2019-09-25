@@ -5517,6 +5517,17 @@ static bool phb4_calculate_windows(struct phb4 *p)
 	return true;
 }
 
+static void read_peev(struct phb4 *p, unsigned long *peev)
+{
+	int i, pe;
+
+	/* Check the PEEV */
+	phb4_ioda_sel(p, IODA3_TBL_PEEV, 0, true);
+
+	for (i = 0, pe = 0; pe < p->num_pes; i++, pe += 64)
+		peev[i] = in_be64(p->regs + PHB_IODA_DATA0);
+}
+
 static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 {
 	struct phb4 *p = is->data;
@@ -5524,11 +5535,50 @@ static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 	static int x[8];
 	uint64_t status;
 	bool freeze;
+	unsigned long freeze_state[8];
+	int first_frozen;
 
-	status = phb4_read_reg(p, PHB_CPU_LOADSTORE_STATUS);
+	phb_lock(&p->phb);
+
+	memset(freeze_state, 0, sizeof(freeze_state));
 
 	/* Freeze? */
+	status = phb4_read_reg(p, PHB_CPU_LOADSTORE_STATUS);
 	freeze = !!(status & PHB_CPU_LS_ANY_FREEZE);
+
+	/* ignore it unless it's a frozen PE */
+	if (!freeze)
+		goto out;
+
+	read_peev(p, freeze_state);
+
+	first_frozen = bitmap_find_one_bit(freeze_state, 0, p->num_pes);
+
+	/*
+	 * Don't print anything if only the reserved PE is frozen.
+	 * This happens during boot when Linux is doing PCI probing
+	 */
+	if (first_frozen == phb4_get_reserved_pe_number(&p->phb))
+		goto out;
+
+	/*
+	 * If we're broken, or the pending indicator is set we've already
+	 * handled this error.
+	 */
+	if (p->err_pending || p->broken)
+		goto out;
+
+	/*
+	 * Otherwise, print a message
+	 *
+	 * XXX: If you want to dump any state, do it here
+	 */
+
+	phb4_eeh_dump_regs(p);
+
+	phb4_dump_ioda_table(p, IODA3_TBL_MIST);
+	phb4_dump_ioda_table(p, IODA3_TBL_LIST);
+	phb4_dump_ioda_table(p, IODA3_TBL_RCAM);
 
 	if (idx == PHB4_LSI_PCIE_INF)
 		prlog(PR_DEBUG, "phb#%04x-inf %d\n", p->phb.opal_id, freeze);
@@ -5538,19 +5588,19 @@ static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 	/* Update pending event */
 	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR, OPAL_EVENT_PCI_ERROR);
 
-	/* If the PHB is broken, go away */
-	if (p->broken)
-		return;
-
 	/*
 	 * Mark the PHB has pending error so that the OS
 	 * can handle it at late point.
 	 */
 	phb4_set_err_pending(p, true);
 
-	// stop IRQ floods
+	// HACK: mask the interrupt if we get too many to prevent interrupt
+	// floods from locking up a thread.
 	if (x[idx]++ > 1024)
 		xive_source_mask(is, isn);
+
+out:
+	phb_unlock(&p->phb);
 }
 
 static uint64_t phb4_lsi_attributes(struct irq_source *is __unused,
