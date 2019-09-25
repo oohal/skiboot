@@ -5522,13 +5522,18 @@ static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 	struct phb4 *p = is->data;
 	uint32_t idx = isn - p->base_lsi;
 	static int x[8];
+	uint64_t status;
+	bool freeze;
+
+	status = phb4_read_reg(p, PHB_CPU_LOADSTORE_STATUS);
+
+	/* Freeze? */
+	freeze = !!(status & PHB_CPU_LS_ANY_FREEZE);
 
 	if (idx == PHB4_LSI_PCIE_INF)
-		prlog(PR_DEBUG, "phb#%04x-inf\n", p->phb.opal_id);
+		prlog(PR_DEBUG, "phb#%04x-inf %d\n", p->phb.opal_id, freeze);
 	else if (idx == PHB4_LSI_PCIE_ER)
-		prlog(PR_DEBUG, "phb#%04x-err\n", p->phb.opal_id);
-	else
-		prlog(PR_DEBUG, "phb#%04x-lsi%d\n", p->phb.opal_id, idx);
+		prlog(PR_DEBUG, "phb#%04x-err %d\n", p->phb.opal_id, freeze);
 
 	/* Update pending event */
 	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR, OPAL_EVENT_PCI_ERROR);
