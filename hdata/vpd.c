@@ -389,7 +389,7 @@ static void vpd_vini_parse(struct dt_node *node,
 				dt_add_property_string(node, "description", "Unknown");
 				prlog(PR_WARNING,
 				      "VPD: CCIN desc not available for: %s\n",
-				      (char *)kw);
+				      kw ? (char  *) kw : "null");
 			}
 		}
 	}

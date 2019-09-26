@@ -5510,7 +5510,6 @@ static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 {
 	struct phb4 *p = is->data;
 	uint32_t idx = isn - p->base_lsi;
-	static int x[8];
 	uint64_t status;
 	bool freeze;
 	unsigned long freeze_state[8];
@@ -5571,11 +5570,6 @@ static void phb4_err_interrupt(struct irq_source *is, uint32_t isn)
 	 * can handle it at late point.
 	 */
 	phb4_set_err_pending(p, true);
-
-	// HACK: mask the interrupt if we get too many to prevent interrupt
-	// floods from locking up a thread.
-	if (x[idx]++ > 1024)
-		xive_source_mask(is, isn);
 
 out:
 	phb_unlock(&p->phb);
