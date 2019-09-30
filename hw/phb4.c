@@ -1583,6 +1583,20 @@ static int64_t phb4_set_ive_pe(struct phb *phb,
 	/* Write entry */
 	out_be64(p->regs + PHB_IODA_DATA0, p->mist_cache[mist_idx]);
 
+	/* read back and verify the update applied, masking off the PQ bits */
+	val = in_be64(p->regs + PHB_IODA_DATA0);
+	if ((val & ~0xc000c000c000c000ull) != p->mist_cache[mist_idx]) {
+		PHBERR(p, "%s MIST update error! ive 0x%x to PE#%llx: cached %016llx mist: %016llx\n",
+		       __func__, ive_num, pe_number,
+		       p->mist_cache[mist_idx],
+		       val & ~0xc000c000c000c000ull);
+	} else {
+		PHBDBG(p, "%s MIST updated! ive 0x%x to PE#%llx: cached %016llx mist: %016llx\n",
+		       __func__, ive_num, pe_number,
+		       p->mist_cache[mist_idx],
+		       val & ~0xc000c000c000c000ull);
+	}
+
 	return OPAL_SUCCESS;
 }
 
