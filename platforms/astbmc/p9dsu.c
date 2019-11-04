@@ -349,7 +349,7 @@ static const struct slot_table_entry p9dsu2u_phb_table[] = {
 
 static const struct slot_table_entry p9dsu2uess_uio_plx_down[] = {
 	{
-		.etype = st_pluggable_slot,
+		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x1,0),
 		.name = "UIO Slot2",
 		.power_limit = 75,
@@ -361,7 +361,7 @@ static const struct slot_table_entry p9dsu2uess_uio_plx_down[] = {
 		.power_limit = 75,
 	},
 	{
-		.etype = st_pluggable_slot,
+		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x9,0),
 		.name = "Onboard LAN",
 	},
@@ -381,7 +381,7 @@ static const struct slot_table_entry p9dsu2uess_uio_plx_up[] = {
 
 static const struct slot_table_entry p9dsu2uess_wio_plx_down[] = {
 	{
-		.etype = st_pluggable_slot,
+		.etype = st_builtin_dev,
 		.location = ST_LOC_DEVFN(0x1,0),
 		.name = "WIO Slot1",
 		.power_limit = 75,
