@@ -760,12 +760,14 @@ uint64_t hservice_firmware_request(uint64_t req_len, void *req,
 	uint64_t resp_len;
 	size_t size;
 	int rc, n;
+	struct hbrt_fw_msg *fw_msg = req;
+	uint64_t type = be64_to_cpu(fw_msg->io_type);
 
 	resp_len = be64_to_cpu(*resp_lenp);
 
 	pr_log(LOG_DEBUG,
-			"HBRT: firmware request: %lu bytes req, %lu bytes resp",
-			req_len, resp_len);
+			"HBRT: firmware request: %lu bytes req, %lu bytes resp, msg type %u",
+			req_len, resp_len, (uint32_t) type);
 
 	/* sanity check for potential overflows */
 	if (req_len > 0xffff || resp_len > 0xffff)
@@ -789,6 +791,28 @@ uint64_t hservice_firmware_request(uint64_t req_len, void *req,
 		ctx->msg = msg;
 		ctx->msg_alloc_len = size;
 	}
+
+
+	/*
+	 * NVDIMM messages should be handled inside of opal-prd rather than
+	 * being forwarded. XXX: I guess we'd need to punt them to the FSP
+	 * too?
+	 */
+	if (type == HBRT_FW_MSG_TYPE_NVDIMM_PROTECTION) {
+		uint64_t proc = be64_to_cpu(fw_msg->nvdimm_protection_state.i_procId);
+		uint64_t prot = be64_to_cpu(fw_msg->nvdimm_protection_state.i_state);
+
+		pr_log(LOG_ERR, "XXXX: got nvdimm status update %lx %lx!",
+			proc, prot);
+
+		hexdump((void *)req, req_len);
+
+		/* gotta swallow these */
+		pr_log(LOG_ERR, "XXXX: fin!");
+
+		return 0;
+	}
+
 
 	memset(msg, 0, size);
 
