@@ -31,6 +31,9 @@
 
 #include <endian.h>
 
+/* for BLKRO ioctl macros */
+#include <linux/fs.h>
+
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -45,12 +48,14 @@
 #include <types.h>
 
 #include <ccan/list/list.h>
+#include <ccan/array_size/array_size.h>
 
 #include "opal-prd.h"
 #include "hostboot-interface.h"
 #include "module.h"
 #include "pnor.h"
 #include "i2c.h"
+#include "opal-prd-nvdimm.h"
 
 struct prd_range {
 	const char		*name;
@@ -69,6 +74,8 @@ struct prd_msgq_item {
 struct opal_prd_ctx {
 	int			fd;
 	int			socket;
+	int			nvdimm_socket;
+	int			nvdimm_listener;
 	struct opal_prd_info	info;
 	struct prd_range	*ranges;
 	int			n_ranges;
@@ -82,6 +89,7 @@ struct opal_prd_ctx {
 	bool			use_syslog;
 	bool			expert_mode;
 	struct list_head	msgq;
+	struct list_head	nvd_list;
 	struct opal_prd_msg	*msg;
 	size_t			msg_alloc_len;
 	void			(*vlog)(int, const char *, va_list);
@@ -124,6 +132,7 @@ static const char *opal_prd_devnode = "/dev/opal-prd";
 static const char *opal_prd_socket = "/run/opal-prd-control";
 static const char *hbrt_code_region_name = "hbrt-code-image";
 static const char *hbrt_code_region_name_ibm = "ibm,hbrt-code-image";
+static const char *opal_prd_dimm_socket = "/run/opal-prd-nvdimm-notifer";
 static const int opal_prd_version = 1;
 static uint64_t opal_prd_ipoll = 0xf000000000000000;
 
@@ -749,6 +758,38 @@ uint64_t hservice_get_interface_capabilities(uint64_t set)
 	if (set == HBRT_CAPS_SET1_OPAL)
 		return HBRT_CAPS_OPAL_HAS_XSCOM_RC ||
 			HBRT_CAPS_OPAL_HAS_WAKEUP_SUPPORT;
+
+	return 0;
+}
+
+struct nvdimm_device {
+	uint32_t chip_id;
+	bool protected;
+	struct list_node link;
+};
+
+static int setup_nvdimms(struct opal_prd_ctx *ctx)
+{
+	struct nvdimm_device *nvd;
+	int i;
+
+	list_head_init(&ctx->nvd_list);
+
+	/* FIXME: how do we determine the initial protected state? */
+
+	for (i = 0; i < nr_chips ; i++) {
+		nvd = calloc(1, sizeof(*nvd));
+		if (!nvd) {
+			pr_debug("ALLOC failed!\n");
+			continue;
+		}
+
+		nvd->chip_id = chips[i];
+		nvd->protected = true;
+		list_add(&ctx->nvd_list, &nvd->link);
+	}
+
+	ctx->nvdimm_listener = -1;
 
 	return 0;
 }
@@ -1879,8 +1920,11 @@ static void handle_prd_control_htmgt_passthru(struct control_msg *send_msg,
 	}
 }
 
+static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, bool protected);
+
 static void handle_prd_control_run_cmd(struct control_msg *send_msg,
-				       struct control_msg *recv_msg)
+				       struct control_msg *recv_msg,
+				       struct opal_prd_ctx *ctx)
 {
 	char *runcmd_output, *s;
 	const char **argv;
@@ -1893,7 +1937,7 @@ static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 	}
 
 	argc = recv_msg->run_cmd.argc;
-	pr_debug("CTRL: run_command, argc:%d\n", argc);
+	pr_debug("CTRL: run_command, argc:%d", argc);
 
 	argv = malloc(argc * sizeof(*argv));
 	if (!argv) {
@@ -1902,6 +1946,33 @@ static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 	}
 
 	s = (char *)recv_msg->data;
+	size = 0;
+	for (i = 0; i < argc; i++) {
+		argv[i] = &s[size];
+		size += (strlen(&s[size]) + 1);
+	}
+
+	/*
+	 * HACK: Intercept "test_nvdimm_fail" in opal-prd and use that to emulate
+	 * a DIMM failure notification from PRD.
+	 */
+	if (strstr((char *)recv_msg->data, "test_nvdimm_fail")) {
+		uint32_t chip_id = 0;
+		int prot = 0;
+
+		if (argc > 1)
+			chip_id = atoi(argv[1]);
+		if (argc > 2)
+			prot = !!atoi(argv[2]);
+		nvdimm_set_chip_status(ctx, chip_id, prot);
+
+		asprintf(&runcmd_output, "simulated failed on chip %u", chip_id);
+		send_msg->response = 0;
+		free(argv);
+		goto reply;
+	}
+	/* ...and back to your regularly scheduled PRDing */
+
 	size = 0;
 	for (i = 0; i < argc; i++) {
 		argv[i] = (char *)htobe64((uint64_t)&s[size]);
@@ -1913,6 +1984,7 @@ static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 	runcmd_output = (char *)be64toh((uint64_t)runcmd_output);
 	free(argv);
 
+reply:
 	s = (char *)send_msg->data;
 	if (runcmd_output) {
 		size = strlen(runcmd_output);
@@ -1998,7 +2070,7 @@ static void handle_prd_control(struct opal_prd_ctx *ctx, int fd)
 		handle_prd_control_htmgt_passthru(send_msg, recv_msg);
 		break;
 	case CONTROL_MSG_RUN_CMD:
-		handle_prd_control_run_cmd(send_msg, recv_msg);
+		handle_prd_control_run_cmd(send_msg, recv_msg, ctx);
 		break;
 	default:
 		pr_log(LOG_WARNING, "CTRL: Unknown control message action %d",
@@ -2022,9 +2094,293 @@ out_send:
 		free(send_msg);
 }
 
+static void nvdimm_close_listener(struct opal_prd_ctx *ctx)
+{
+	pr_log(LOG_NOTICE, "NVDIMM: closed listener socket");
+	close(ctx->nvdimm_listener);
+	ctx->nvdimm_listener = -1;
+}
+
+void nvdimm_send_msg(struct opal_prd_ctx *ctx, int fd, int type, uint32_t d1, uint32_t d2)
+{
+	struct nvdimm_msg msg;
+	int rc;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.type = type;
+	msg.d1 = d1;
+	msg.d2 = d2;
+
+	rc = send(ctx->nvdimm_listener, &msg, sizeof(msg), MSG_DONTWAIT | MSG_NOSIGNAL);
+	if (rc < 8) {
+		pr_log(LOG_ERR, "NVDIMM: send error %d message: %x,%x,%x\n", rc, type, d1, d2);
+		nvdimm_close_listener(ctx);
+	}
+}
+
+void nvdimm_send_msg_all(struct opal_prd_ctx *ctx, int type, uint32_t d1, uint32_t d2)
+{
+	if (ctx->nvdimm_listener == -1)
+		return;
+
+	nvdimm_send_msg(ctx, ctx->nvdimm_listener, type, d1, d2);
+}
+
+static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, int want_minor);
+
+static void handle_nvdimm_msg(struct opal_prd_ctx *ctx, int fd)
+{
+	struct nvdimm_device *nvd = NULL;
+	struct nvdimm_msg msg;
+	int rc;
+
+	rc = recv(fd, &msg, sizeof(msg), 0);
+	if (rc < sizeof(msg))
+		goto err;
+
+	pr_log(LOG_NOTICE, "NVDIMM: Got msg %#x, d1: %#x d2: %#x", msg.type, msg.d1, msg.d2);
+
+	switch (msg.type) {
+	case NVDIMM_QUERY_CHIP:
+
+		list_for_each(&ctx->nvd_list, nvd, link) {
+			if (nvd->chip_id == msg.d1)
+				break;
+		}
+
+		if (!nvd) {
+			pr_log(LOG_NOTICE, "NVDIMM: Got query for unknown chip %x", msg.d1);
+			goto err;
+		}
+
+		nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP,
+				nvd->chip_id, nvd->protected);
+		break;
+
+	case NVDIMM_QUERY_CHIP_ALL:
+		list_for_each(&ctx->nvd_list, nvd, link)
+			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP, nvd->chip_id, nvd->protected);
+		break;
+
+	case NVDIMM_QUERY_CHIP_SET:
+		list_for_each(&ctx->nvd_list, nvd, link) {
+			if (nvd->chip_id == msg.d1) {
+				nvdimm_set_chip_status(ctx, msg.d1, !!msg.d2);
+				break;
+			}
+		}
+
+		if (!nvd)
+			goto err;
+		break;
+
+	case NVDIMM_QUERY_BDEV:
+		pr_log(LOG_ERR, "NVDIMM: checking %d:%d", msg.d1 >> 16, msg.d1 & 0xffff);
+		if (nvdimm_check_bdev(ctx, fd, (msg.d1 >> 16), msg.d1 & 0xffff))
+			goto err;
+		break;
+
+	case NVDIMM_QUERY_BDEV_ALL:
+		if (nvdimm_check_bdev(ctx, fd, -1, -1))
+			goto err;
+		break;
+
+	default:
+		pr_log(LOG_ERR, "NVDIMM: Unknown msg %x", msg.type);
+		goto err;
+	}
+
+	return;
+
+err:
+	nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_ERROR, 0xffffffff, 0xffffffff);
+	nvdimm_close_listener(ctx);
+}
+
+static int filter_hidden(const struct dirent *d)
+{
+	/* skip . and .. */
+	if (d->d_name[0] == '.')
+		return 0;
+	return 1;
+}
+
+int fscanf_at(int dirfd, const char *path, const char *fmt, ...)
+{
+	int rc, fd = openat(dirfd, path, O_RDONLY);
+	va_list args;
+	FILE *f;
+
+	if (fd < 0)
+		return 0;
+
+	f = fdopen(fd, "r");
+	if (!f) {
+		close(fd);
+		return 0;
+	}
+
+	va_start(args, fmt);
+	rc = vfscanf(f, fmt, args);
+	va_end(args);
+
+	return rc;
+}
+
+bool has_file(int dirfd, const char *path)
+{
+	struct stat s;
+
+	return !fstatat(dirfd, path, &s, 0);
+}
+
+/*
+ * 1. get failure notice
+ * 2. find all the block devices associated with that notice
+ * 3. mark all their devices as RO
+ */
+static void nvdimm_fail_bdevs_on_chip(struct opal_prd_ctx *ctx, uint32_t c, int set_ro)
+{
+	int sysblock_fd = open("/sys/block/", O_RDONLY);
+	struct dirent **names;
+	int i, n;
+
+	/* Find a list of pmem based devices on this numa node
+	 *
+	 * XXX: This is probably not going to work for device-mapper devs
+	 * since their device/ isn't going to be a pmem namespace.
+	 *
+	 * XXX: this assumes chip_id == numa node, which is true, but might
+	 * not be in the long run.
+	 */
+	n = scandirat(sysblock_fd, ".", &names, filter_hidden, NULL);
+	for (i = 0; i < n; i++) {
+		int dirfd, fd, numa_node, major, minor;
+		char path[128];
+
+		dirfd = openat(sysblock_fd, names[i]->d_name, O_RDONLY);
+		if (dirfd < 0)
+			continue;
+
+		/* pmem devices should always have a namespace pointer */
+		if (!has_file(dirfd, "device/namespace"))
+			goto next;
+		if (fscanf_at(dirfd, "device/numa_node", "%d", &numa_node) != 1)
+			goto next;
+		if (fscanf_at(dirfd, "dev", "%d:%d", &major, &minor) != 2)
+			goto next;
+
+		/* only mark the dev as RO if it's on the target node, or unknown node */
+		if (numa_node != c && numa_node != -1)
+			goto next;
+
+		pr_debug("NVDIMM: Marking %s (%d:%d) on node %d as RO!",
+			 names[i]->d_name, major, minor, numa_node);
+
+		/* /dev/block/<MAJOR:MINOR> symlinks to the real device file */
+		snprintf(path, sizeof(path), "/dev/block/%d:%d", major, minor);
+
+		fd = open(path, O_RDONLY);
+		if (fd != -1) {
+			ioctl(fd, BLKROSET, &set_ro);
+			close(fd);
+
+			pr_log(LOG_NOTICE, "NVDIMM: Marked %s (%d:%d) as %s",
+				names[i]->d_name, major, minor, set_ro ? "ro" : "rw");
+			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_BDEV,
+					    (major << 16) | minor, set_ro);
+		}
+
+	next:
+		close(dirfd);
+		free(names[i]);
+	}
+	free(names);
+	close(sysblock_fd);
+}
+
+static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, int want_minor)
+{
+	int sysblock_fd = open("/sys/block/", O_RDONLY);
+	bool found = false, error = false;
+	struct nvdimm_device *nvd;
+	struct dirent **names;
+	int i, n;
+
+	n = scandirat(sysblock_fd, ".", &names, filter_hidden, NULL);
+	for (i = 0; i < n; i++) {
+		int dirfd, numa_node, major, minor;
+
+		dirfd = openat(sysblock_fd, names[i]->d_name, O_RDONLY);
+		if (dirfd < 0) {
+			error = true;
+			goto next;
+		}
+
+		if (fscanf_at(dirfd, "dev", "%d:%d", &major, &minor) != 2) {
+			error = 1;
+			goto next;
+		}
+		if (want_major >= 0 && want_major != major)
+			goto next;
+		if (want_minor >= 0 && want_minor != minor)
+			goto next;
+
+		found = true;
+
+		/* pmem devices should always have a namespace pointer */
+		if (!has_file(dirfd, "device/namespace"))
+			goto next;
+
+		if (fscanf_at(dirfd, "device/numa_node", "%d", &numa_node) != 1) {
+			error = true;
+			goto next;
+		}
+
+		/* ok, tell the listener the bdev status */
+		list_for_each(&ctx->nvd_list, nvd, link) {
+			if (nvd->chip_id != numa_node)
+				continue;
+
+			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_BDEV,
+					(major << 16) | minor,
+					nvd->protected);
+		}
+
+	next:
+		close(dirfd);
+		free(names[i]);
+	}
+	free(names);
+	close(sysblock_fd);
+
+	return error || !found;
+}
+
+
+/* XXX: NB: best we can do is localise DIMM failures to a chip */
+static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, bool protected)
+{
+	struct nvdimm_device *nvd;
+
+	pr_log(LOG_ERR, "NVDIMM: Setting nvdimm status for chip %x to %s", c,
+		protected ? "protected" : "failed");
+
+	list_for_each(&ctx->nvd_list, nvd, link) {
+		if (nvd->chip_id == c) {
+			nvd->protected = protected;
+			nvdimm_fail_bdevs_on_chip(ctx, c, !protected);
+			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_CHIP, c, protected);
+			break;
+		}
+	}
+
+	return 0;
+}
+
 static int run_attn_loop(struct opal_prd_ctx *ctx)
 {
-	struct pollfd pollfds[2];
+	struct pollfd pollfds[3];
 	struct opal_prd_msg msg;
 	int rc, fd;
 
@@ -2062,12 +2418,18 @@ static int run_attn_loop(struct opal_prd_ctx *ctx)
 	pollfds[0].events = POLLIN | POLLERR;
 	pollfds[1].fd = ctx->socket;
 	pollfds[1].events = POLLIN | POLLERR;
+	pollfds[2].fd = ctx->nvdimm_socket;
+	pollfds[2].events = POLLIN | POLLERR;
 
 	for (;;) {
 		/* run through any pending messages */
 		process_msgq(ctx);
 
-		rc = poll(pollfds, 2, -1);
+		if (ctx->nvdimm_listener > -1)
+			rc = poll(pollfds, 4, -1);
+		else
+			rc = poll(pollfds, 3, -1);
+
 		if (rc < 0) {
 			pr_log(LOG_ERR, "FW: event poll failed: %m");
 			exit(EXIT_FAILURE);
@@ -2091,6 +2453,36 @@ static int run_attn_loop(struct opal_prd_ctx *ctx)
 			handle_prd_control(ctx, fd);
 			close(fd);
 		}
+
+		if (pollfds[2].revents & POLLIN) {
+			/* FIXME: We only support one listening thread atm  */
+			if (ctx->nvdimm_listener != -1)
+				nvdimm_close_listener(ctx);
+
+			fd = accept4(ctx->nvdimm_socket, NULL, NULL, SOCK_NONBLOCK);
+			if (fd < 0) {
+				pr_log(LOG_NOTICE, "CTRL: nvdimm socket accept failed: %m");
+				continue;
+			}
+
+			pr_log(LOG_NOTICE, "NVIDMM: listener connected!");
+
+			pollfds[3].fd = fd;
+			pollfds[3].events = POLLIN | POLLERR;
+			pollfds[3].revents = 0;
+			ctx->nvdimm_listener = fd;
+
+			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_HELLO, 1, 0);
+		}
+
+		/* FIXME: handle multiple listeners */
+		if (ctx->nvdimm_listener == -1)
+			continue;
+
+		if (pollfds[3].revents & (POLLERR | POLLNVAL | POLLHUP))
+			nvdimm_close_listener(ctx);
+		else if (pollfds[3].revents & POLLIN)
+			handle_nvdimm_msg(ctx, ctx->nvdimm_listener);
 	}
 
 	return 0;
@@ -2136,6 +2528,45 @@ static int init_control_socket(struct opal_prd_ctx *ctx)
 	return 0;
 }
 
+static int init_nvdimm_socket(struct opal_prd_ctx *ctx)
+{
+	struct sockaddr_un addr;
+	int fd, rc;
+
+	unlink(opal_prd_dimm_socket);
+
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, opal_prd_dimm_socket);
+
+	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+	if (fd < 0) {
+		pr_log(LOG_WARNING, "CTRL: Can't open control socket %s: %m",
+				opal_prd_dimm_socket);
+		return -1;
+	}
+
+	rc = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
+	if (rc) {
+		pr_log(LOG_WARNING, "CTRL: Can't bind control socket %s: %m",
+				opal_prd_dimm_socket);
+		close(fd);
+		return -1;
+	}
+
+	rc = listen(fd, 0);
+	if (rc) {
+		pr_log(LOG_WARNING, "CTRL: Can't listen on "
+				"control socket %s: %m", opal_prd_dimm_socket);
+		close(fd);
+		return -1;
+	}
+
+	pr_log(LOG_INFO, "CTRL: Listening on control socket %s",
+			opal_prd_dimm_socket);
+
+	ctx->nvdimm_socket = fd;
+	return 0;
+}
 
 static int run_prd_daemon(struct opal_prd_ctx *ctx)
 {
@@ -2201,12 +2632,20 @@ static int run_prd_daemon(struct opal_prd_ctx *ctx)
 		goto out_close;
 	}
 
+	rc = init_nvdimm_socket(ctx);
+	if (rc) {
+		pr_log(LOG_WARNING, "CTRL: Error initialising PRD NVDIMM notifer: %m");
+		goto out_close;
+	}
 
 	rc = prd_init(ctx);
 	if (rc) {
 		pr_log(LOG_ERR, "FW: Error initialising PRD channel");
 		goto out_close;
 	}
+
+	/* needs to happen after prd_init() */
+	setup_nvdimms(ctx);
 
 	if (ctx->hbrt_file_name) {
 		rc = map_hbrt_file(ctx, ctx->hbrt_file_name);
