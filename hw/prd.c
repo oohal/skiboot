@@ -5,6 +5,8 @@
  * Copyright 2014-2019 IBM Corp.
  */
 
+#define pr_fmt(fmt) "PRD: " fmt
+
 #include <skiboot.h>
 #include <opal.h>
 #include <lock.h>
@@ -117,8 +119,7 @@ static void prd_msg_consumed(void *data, int status)
 			prd_msg_fsp_notify = NULL;
 		}
 		if (status != 0) {
-			prlog(PR_DEBUG,
-			      "PRD: Failed to send FSP -> HBRT message\n");
+			prlog(PR_DEBUG, "Failed to send FSP -> HBRT message\n");
 			notify_status = FSP_STATUS_GENERIC_FAILURE;
 		}
 		assert(platform.prd);
@@ -138,7 +139,7 @@ static void prd_msg_consumed(void *data, int status)
 		event = EVENT_FSP_OCC_LOAD_START;
 		break;
 	default:
-		prlog(PR_ERR, "PRD: invalid msg consumed, type: 0x%x\n",
+		prlog(PR_ERR, "invalid msg consumed, type: 0x%x\n",
 				msg->hdr.type);
 	}
 
@@ -175,7 +176,7 @@ static int populate_ipoll_msg(struct opal_prd_msg *msg, uint32_t proc)
 	unlock(&ipoll_lock);
 
 	if (rc) {
-		prlog(PR_ERR, "PRD: Unable to read ipoll status (chip %d)!\n",
+		prlog(PR_ERR, "Unable to read ipoll status (chip %d)!\n",
 				proc);
 		return -1;
 	}
@@ -304,7 +305,7 @@ void prd_psi_interrupt(uint32_t proc)
 
 	rc = ipoll_record_and_mask_pending(proc);
 	if (rc)
-		prlog(PR_ERR, "PRD: Failed to update IPOLL mask\n");
+		prlog(PR_ERR, "Failed to update IPOLL mask\n");
 
 	__prd_event(proc, EVENT_ATTN);
 
@@ -375,8 +376,7 @@ int prd_hbrt_fsp_msg_notify(void *data, u32 dsize)
 	int rc = FSP_STATUS_GENERIC_FAILURE;
 
 	if (!prd_enabled || !prd_active) {
-		prlog(PR_NOTICE, "PRD: %s: PRD daemon is not ready\n",
-		      __func__);
+		prlog(PR_NOTICE, "%s: PRD daemon is not ready\n", __func__);
 		return rc;
 	}
 
@@ -386,7 +386,7 @@ int prd_hbrt_fsp_msg_notify(void *data, u32 dsize)
 		sizeof(prd_msg->fw_notify) + fw_notify_size;
 
 	if (size > OPAL_PRD_MSG_SIZE_MAX) {
-		prlog(PR_DEBUG, "PRD: FSP - HBRT notify message size (0x%x)"
+		prlog(PR_DEBUG, "FSP - HBRT notify message size (0x%x)"
 		      " is bigger than prd interface can handle\n", size);
 		return rc;
 	}
@@ -395,7 +395,7 @@ int prd_hbrt_fsp_msg_notify(void *data, u32 dsize)
 
 	/* FSP - HBRT messages are serialized */
 	if (prd_msg_fsp_notify) {
-		prlog(PR_DEBUG, "PRD: FSP - HBRT notify message is busy\n");
+		prlog(PR_DEBUG, "FSP - HBRT notify message is busy\n");
 		goto unlock_events;
 	}
 
@@ -403,7 +403,7 @@ int prd_hbrt_fsp_msg_notify(void *data, u32 dsize)
 	prd_msg_fsp_notify = zalloc(size);
 	if (!prd_msg_fsp_notify) {
 		prlog(PR_DEBUG,
-		      "PRD: %s: Failed to allocate memory.\n", __func__);
+		      "%s: Failed to allocate memory.\n", __func__);
 		goto unlock_events;
 	}
 
@@ -435,7 +435,7 @@ static int prd_msg_handle_attn_ack(struct opal_prd_msg *msg)
 	unlock(&ipoll_lock);
 
 	if (rc)
-		prlog(PR_ERR, "PRD: Unable to unmask ipoll!\n");
+		prlog(PR_ERR, "Unable to unmask ipoll!\n");
 
 	return rc;
 }
@@ -541,7 +541,7 @@ static int prd_msg_handle_firmware_req(struct opal_prd_msg *msg)
 		 * whether fsp_req message is free or not.
 		 */
 		if (prd_msg_fsp_req) {
-			prlog(PR_DEBUG, "PRD: HBRT - FSP message is busy\n");
+			prlog(PR_DEBUG, "HBRT - FSP message is busy\n");
 			rc = OPAL_BUSY;
 			break;
 		}
@@ -554,7 +554,7 @@ static int prd_msg_handle_firmware_req(struct opal_prd_msg *msg)
 			sizeof(msg->fw_resp) + fw_req_len;
 
 		if (resp_msg_size > OPAL_PRD_MSG_SIZE_MAX) {
-			prlog(PR_DEBUG, "PRD: HBRT - FSP response size (0x%llx)"
+			prlog(PR_DEBUG, "HBRT - FSP response size (0x%llx)"
 			      " is bigger than prd interface can handle\n",
 			      resp_msg_size);
 			rc = OPAL_INTERNAL_ERROR;
@@ -571,7 +571,7 @@ static int prd_msg_handle_firmware_req(struct opal_prd_msg *msg)
 		 */
 		prd_msg_fsp_req = zalloc(resp_msg_size);
 		if (!prd_msg_fsp_req) {
-			prlog(PR_DEBUG, "PRD: Failed to allocate memory "
+			prlog(PR_DEBUG, "Failed to allocate memory "
 			      "for HBRT - FSP message\n");
 			rc = OPAL_RESOURCE;
 			break;
@@ -618,7 +618,7 @@ static int prd_msg_handle_firmware_req(struct opal_prd_msg *msg)
 		}
 		break;
 	default:
-		prlog(PR_DEBUG, "PRD: Unsupported fw_request type : 0x%llx\n",
+		prlog(PR_DEBUG, "Unsupported fw_request type : 0x%llx\n",
 		      be64_to_cpu(fw_req->type));
 		rc = -ENOSYS;
 	}
@@ -685,7 +685,7 @@ static int64_t opal_prd_msg(struct opal_prd_msg *msg)
 			msg->fsp_occ_reset_status.status);
 		break;
 	default:
-		prlog(PR_DEBUG, "PRD: Unsupported prd message type : 0x%x\n",
+		prlog(PR_DEBUG, "Unsupported prd message type : 0x%x\n",
 		      msg->hdr.type);
 		rc = OPAL_UNSUPPORTED;
 	}
