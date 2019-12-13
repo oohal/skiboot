@@ -235,6 +235,15 @@ static void phb4_write_reg(struct phb4 *p, uint32_t offset, uint64_t val)
 		return out_be64(p->regs + offset, val);
 }
 
+static bool phb4_is_dd20(struct phb4 *p)
+{
+	struct proc_chip *chip = get_chip(p->chip_id);
+
+	if (p->rev == PHB4_REV_NIMBUS_DD20 && ((0xf & chip->ec_level) == 0))
+		return true;
+	return false;
+}
+
 /* Helper to select an IODA table entry */
 static inline void phb4_ioda_sel(struct phb4 *p, uint32_t table,
 				 uint32_t addr, bool autoinc)
@@ -2914,33 +2923,24 @@ static int64_t phb4_poll_link(struct pci_slot *slot)
 	return OPAL_HARDWARE;
 }
 
-static unsigned int phb4_get_max_link_speed(struct phb4 *p, struct dt_node *np)
+static unsigned int phb4_get_max_link_speed(struct phb4 *p)
 {
+	struct proc_chip *chip = get_chip(p->chip_id);
 	unsigned int max_link_speed;
-	struct proc_chip *chip;
-	chip = get_chip(p->chip_id);
 
 	/* Priority order: NVRAM -> dt -> GEN3 dd2.00 -> GEN4 */
 	max_link_speed = 4;
-	if (p->rev == PHB4_REV_NIMBUS_DD20 &&
-	    ((0xf & chip->ec_level) == 0) && chip->ec_rev == 0)
+
+	/* DD2.00 chips are known to have reliability issues at Gen4 */
+	if (phb4_is_dd20(p) && chip->ec_rev == 0)
 		max_link_speed = 3;
-	if (np) {
-		if (dt_has_node_property(np, "ibm,max-link-speed", NULL)) {
-			max_link_speed = dt_prop_get_u32(np, "ibm,max-link-speed");
-			p->dt_max_link_speed = max_link_speed;
-		}
-		else {
-			p->dt_max_link_speed = 0;
-		}
-	}
-	else {
-		if (p->dt_max_link_speed > 0) {
-			max_link_speed = p->dt_max_link_speed;
-		}
-	}
-	if (pcie_max_link_speed)
+
+	if (p->dt_max_link_speed)
+		max_link_speed = p->dt_max_link_speed;
+
+	if (pcie_max_link_speed) /* nvram setting */
 		max_link_speed = pcie_max_link_speed;
+
 	if (max_link_speed > 4) /* clamp to 4 */
 		max_link_speed = 4;
 
@@ -3043,7 +3043,7 @@ static int64_t phb4_freset(struct pci_slot *slot)
 		PHBDBG(p, "FRESET: Starts\n");
 
 		/* Reset max link speed for training */
-		p->max_link_speed = phb4_get_max_link_speed(p, NULL);
+		p->max_link_speed = phb4_get_max_link_speed(p);
 
 		PHBDBG(p, "FRESET: Prepare for link down\n");
 		phb4_prepare_link_change(slot, false);
@@ -4050,15 +4050,6 @@ static uint64_t tve_encode_50b_noxlate(uint64_t start_addr, uint64_t end_addr)
 	tve |= (end_addr >> 40) & (3ull << 8);
 	tve |= PPC_BIT(51) | IODA3_TVT_NON_TRANSLATE_50;
 	return tve;
-}
-
-static bool phb4_is_dd20(struct phb4 *p)
-{
-	struct proc_chip *chip = get_chip(p->chip_id);
-
-	if (p->rev == PHB4_REV_NIMBUS_DD20 && ((0xf & chip->ec_level) == 0))
-		return true;
-	return false;
 }
 
 static int64_t phb4_get_capp_info(int chip_id, struct phb *phb,
@@ -5720,7 +5711,9 @@ static void phb4_create(struct dt_node *np)
 	if (!phb4_read_capabilities(p))
 		goto failed;
 
-	p->max_link_speed = phb4_get_max_link_speed(p, np);
+	p->dt_max_link_speed = dt_prop_get_u32_def(np, "ibm,max-link-speed", 0);
+	p->max_link_speed = phb4_get_max_link_speed(p);
+
 	PHBINF(p, "Max link speed: GEN%i\n", p->max_link_speed);
 
 	/* Check for lane equalization values from HB or HDAT */
