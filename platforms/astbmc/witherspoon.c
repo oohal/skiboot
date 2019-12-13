@@ -506,12 +506,48 @@ static void witherspoon_finalise_dt(bool is_reboot)
 	}
 }
 
-/* The only difference between these is the PCI slot handling */
+#include <pci.h>
+#include <phb4.h>
+#include <phb4-regs.h>
+static void mihawk_setup_phb(struct phb *phb, unsigned int __unused index)
+{
+	struct phb4 *p = phb_to_phb4(phb);
+
+	if (p->pec == 2)
+		phb4_set_dt_max_link_speed(p, 3);
+}
+
+static void mihawk_pci_probe_complete(void)
+{
+	struct phb *phb;
+
+	for_each_phb(phb) {
+		struct phb4 *p = phb_to_phb4(phb);
+		struct pci_device *pd;
+
+		if (phb->phb_type != phb_type_pcie_v4 || p->pec != 2)
+			continue;
+
+		pd = pci_find_dev(phb, 0x0100);
+		if (!pd)
+			continue;
+		if (pd->vdid != 0x405211f8)
+			continue;
+
+		PCIERR(&p->phb, 0, "restoring to gen4\n");
+		phb4_set_dt_max_link_speed(p, 4);
+	}
+
+	check_all_slot_table();
+}
+
 
 DECLARE_PLATFORM(witherspoon) = {
 	.name			= "Witherspoon",
 	.probe			= witherspoon_probe,
 	.init			= astbmc_init,
+	.pci_setup_phb 		= mihawk_setup_phb,
+	.pci_probe_complete	= mihawk_pci_probe_complete,
 	.pre_pci_fixup		= witherspoon_shared_slot_fixup,
 	.start_preload_resource	= flash_start_preload_resource,
 	.resource_loaded	= flash_resource_loaded,
