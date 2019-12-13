@@ -14,6 +14,8 @@
 #include <npu2.h>
 #include <pci.h>
 #include <pci-cfg.h>
+#include <phb4-regs.h>
+#include <phb4.h>
 
 #include "astbmc.h"
 
@@ -269,6 +271,43 @@ static bool mihawk_probe(void)
 	return true;
 }
 
+
+/*
+ * Limit phb3 / (pec2) to gen3 speeds until we know the card (or riser)
+ * can support gen4 speeds.
+ */
+static void mihawk_setup_phb(struct phb *phb, unsigned int __unused index)
+{
+	struct phb4 *p = phb_to_phb4(phb);
+
+	if (p->pec == 2)
+		phb4_set_dt_max_link_speed(p, 3);
+}
+
+static void mihawk_pci_probe_complete(void)
+{
+	struct phb *phb;
+
+	for_each_phb(phb) {
+		struct phb4 *p = phb_to_phb4(phb);
+		struct pci_device *pd;
+
+		if (phb->phb_type != phb_type_pcie_v4 || p->pec != 2)
+			continue;
+
+		pd = pci_find_dev(phb, 0x0100);
+		if (!pd)
+			continue;
+		if (pd->vdid != 0x405211f8)
+			continue;
+
+		PCIERR(&p->phb, 0, "restoring to gen4\n");
+		phb4_set_dt_max_link_speed(p, 4);
+	}
+
+	check_all_slot_table();
+}
+
 DECLARE_PLATFORM(mihawk) = {
 	.name			= "Mihawk",
 	.probe			= mihawk_probe,
@@ -277,7 +316,8 @@ DECLARE_PLATFORM(mihawk) = {
 	.resource_loaded	= flash_resource_loaded,
 	.bmc			= &bmc_plat_ast2500_openbmc,
 	.pci_get_slot_info	= mihawk_get_slot_info,
-	.pci_probe_complete	= check_all_slot_table,
+	.pci_probe_complete	= mihawk_pci_probe_complete,
+	.pci_setup_phb 		= mihawk_setup_phb,
 	.cec_power_down         = astbmc_ipmi_power_down,
 	.cec_reboot             = astbmc_ipmi_reboot,
 	.elog_commit		= ipmi_elog_commit,

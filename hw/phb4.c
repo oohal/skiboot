@@ -2947,6 +2947,27 @@ static unsigned int phb4_get_max_link_speed(struct phb4 *p)
 	return max_link_speed;
 }
 
+/*
+ * Has the same effect as the ibm,max-link-speed property.
+ * i.e. sets the default link speed, while allowing NVRAM
+ * overrides, etc to still take effect.
+ */
+void phb4_set_dt_max_link_speed(struct phb4 *p, int new_max)
+{
+	uint64_t scr;
+	int max;
+
+	/* update the stored setting */
+	p->dt_max_link_speed = new_max;
+
+	/* take into account nvram settings, etc */
+	max = phb4_get_max_link_speed(p);
+
+	scr = phb4_read_reg(p, PHB_PCIE_SCR);
+	scr = SETFIELD(PHB_PCIE_SCR_MAXLINKSPEED, scr, max);
+	phb4_write_reg(p, PHB_PCIE_SCR, scr);
+}
+
 static void phb4_assert_perst(struct pci_slot *slot, bool assert)
 {
 	struct phb4 *p = phb_to_phb4(slot->phb);
