@@ -1921,6 +1921,7 @@ static void handle_prd_control_htmgt_passthru(struct control_msg *send_msg,
 }
 
 static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, bool protected);
+static void nvdimm_debug_dump_status(char **output);
 
 static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 				       struct control_msg *recv_msg,
@@ -1956,7 +1957,8 @@ static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 	 * HACK: Intercept "test_nvdimm_fail" in opal-prd and use that to emulate
 	 * a DIMM failure notification from PRD.
 	 */
-	if (strstr((char *)recv_msg->data, "test_nvdimm_fail")) {
+	if (strstr((char *)recv_msg->data, "test_nvdimm_fail") || /* old */
+	    strstr((char *)recv_msg->data, "nvdimm_fail_inj")) { /* new */
 		uint32_t chip_id = 0;
 		int prot = 0;
 
@@ -1966,8 +1968,15 @@ static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 			prot = !!atoi(argv[2]);
 		nvdimm_set_chip_status(ctx, chip_id, prot);
 
-		asprintf(&runcmd_output, "simulated failed on chip %u", chip_id);
+		asprintf(&runcmd_output, "Simulated failed on chip %u", chip_id);
 		send_msg->response = 0;
+		free(argv);
+		goto reply;
+	} else if (strstr((char *)recv_msg->data, "nvdimm_status")) {
+		/* dump the protections status of the NVDIMMs we know about */
+		nvdimm_debug_dump_status(&runcmd_output);
+		send_msg->response = 0;
+
 		free(argv);
 		goto reply;
 	}
@@ -2124,6 +2133,25 @@ void nvdimm_send_msg_all(struct opal_prd_ctx *ctx, int type, uint32_t d1, uint32
 		return;
 
 	nvdimm_send_msg(ctx, ctx->nvdimm_listener, type, d1, d2);
+}
+
+static void nvdimm_debug_dump_status(char **output)
+{
+	struct nvdimm_device *nvd;
+	char *buf = strdup("");
+
+	list_for_each(&ctx->nvd_list, nvd, link) {
+		char *old = buf;
+
+		asprintf(&buf, "%s\nchip: %x, protected: %s", buf, nvd->chip_id,
+		         nvd->protected ? "true" : "false");
+		free(old);
+	}
+
+	if (!buf)
+		buf = strdup("internal error!");
+
+	*output = buf;
 }
 
 static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, int want_minor);
