@@ -172,6 +172,9 @@ static u64 chips[256];
 
 static int read_prd_msg(struct opal_prd_ctx *ctx);
 
+static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, bool protected);
+static void nvdimm_debug_dump_status(char **output);
+
 static struct prd_range *find_range(const char *name, uint32_t instance)
 {
 	struct prd_range *range;
@@ -845,6 +848,12 @@ uint64_t hservice_firmware_request(uint64_t req_len, void *req,
 
 		pr_log(LOG_ERR, "XXXX: got nvdimm status update %lx %lx!",
 			proc, prot);
+
+		// mask out valid image bit and erased image bit
+		// any other bit being set indicate a problem
+		prot &= ~0x0c;
+
+		nvdimm_set_chip_status(ctx, proc, !prot);
 
 		hexdump((void *)req, req_len);
 
@@ -1919,9 +1928,6 @@ static void handle_prd_control_htmgt_passthru(struct control_msg *send_msg,
 		send_msg->data_len = MAX_CONTROL_MSG_BUF;
 	}
 }
-
-static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, bool protected);
-static void nvdimm_debug_dump_status(char **output);
 
 static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 				       struct control_msg *recv_msg,
