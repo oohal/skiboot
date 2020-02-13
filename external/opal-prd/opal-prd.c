@@ -3020,11 +3020,11 @@ static void usage(const char *progname)
 	printf("\t%s run [arg 0] [arg 1]..[arg n]\n", progname);
 	printf("\n");
 	printf("Options:\n"
-"\t--debug            verbose logging for debug information\n"
-"\t--pnor DEVICE      use PNOR MTD device\n"
-"\t--file FILE        use FILE for hostboot runtime code (instead of code\n"
-"\t                     exported by firmware)\n"
-"\t--stdio            log to stdio, instead of syslog\n");
+"\t-d|--debug            verbose logging for debug information\n"
+"\t-p|--pnor DEVICE      use PNOR MTD device\n"
+"\t-f|--file FILE        use FILE for hostboot runtime code (instead of code\n"
+"\t                        exported by firmware)\n"
+"\t-s|--stdio            log to stdio, instead of syslog\n");
 }
 
 static void print_version(void)
