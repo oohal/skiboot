@@ -3020,6 +3020,8 @@ static void usage(const char *progname)
 	printf("\t%s run [arg 0] [arg 1]..[arg n]\n", progname);
 	printf("\n");
 	printf("Options:\n"
+"\t-v|--version          Print opal-prd version\n"
+"\t-h|--help             Print usage blob\n"
 "\t-d|--debug            verbose logging for debug information\n"
 "\t-p|--pnor DEVICE      use PNOR MTD device\n"
 "\t-f|--file FILE        use FILE for hostboot runtime code (instead of code\n"
