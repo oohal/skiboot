@@ -172,7 +172,7 @@ static u64 chips[256];
 
 static int read_prd_msg(struct opal_prd_ctx *ctx);
 
-static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, bool protected);
+static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, uint32_t status);
 static void nvdimm_debug_dump_status(char **output);
 
 static struct prd_range *find_range(const char *name, uint32_t instance)
@@ -767,7 +767,7 @@ uint64_t hservice_get_interface_capabilities(uint64_t set)
 
 struct nvdimm_device {
 	uint32_t chip_id;
-	bool protected;
+	uint32_t status;
 	struct list_node link;
 };
 
@@ -788,7 +788,7 @@ static int setup_nvdimms(struct opal_prd_ctx *ctx)
 		}
 
 		nvd->chip_id = chips[i];
-		nvd->protected = true;
+		nvd->status = 0xff;
 		list_add(&ctx->nvd_list, &nvd->link);
 	}
 
@@ -849,11 +849,7 @@ uint64_t hservice_firmware_request(uint64_t req_len, void *req,
 		pr_log(LOG_ERR, "XXXX: got nvdimm status update %lx %lx!",
 			proc, prot);
 
-		// mask out valid image bit and erased image bit
-		// any other bit being set indicate a problem
-		prot &= ~0x0c;
-
-		nvdimm_set_chip_status(ctx, proc, !prot);
+		nvdimm_set_chip_status(ctx, proc, prot);
 
 		hexdump((void *)req, req_len);
 
@@ -1969,12 +1965,16 @@ static void handle_prd_control_run_cmd(struct control_msg *send_msg,
 		int prot = 0;
 
 		if (argc > 1)
-			chip_id = atoi(argv[1]);
+			chip_id = strtol(argv[1], NULL, 16);
 		if (argc > 2)
-			prot = !!atoi(argv[2]);
+			prot = strtol(argv[2], NULL, 16);
+
+		if (!prot)
+			prot = NVDIMM_STAT_OK_MASK;
 		nvdimm_set_chip_status(ctx, chip_id, prot);
 
-		asprintf(&runcmd_output, "Simulated failed on chip %u", chip_id);
+		asprintf(&runcmd_output, "Set status of chip %u to %x (%sprotected)",
+			chip_id, prot, nvdimm_is_ok(prot) ? "" : "not ");
 		send_msg->response = 0;
 		free(argv);
 		goto reply;
@@ -2149,8 +2149,10 @@ static void nvdimm_debug_dump_status(char **output)
 	list_for_each(&ctx->nvd_list, nvd, link) {
 		char *old = buf;
 
-		asprintf(&buf, "%s\nchip: %x, protected: %s", buf, nvd->chip_id,
-		         nvd->protected ? "true" : "false");
+		asprintf(&buf, "%s\nchip: %x, protected: %s status: %x",
+			 buf, nvd->chip_id,
+		         nvdimm_is_ok(nvd->status) ? "true" : "false",
+			 nvd->status);
 		free(old);
 	}
 
@@ -2159,6 +2161,13 @@ static void nvdimm_debug_dump_status(char **output)
 
 	*output = buf;
 }
+
+/*
+static uint32_t nvdimm_pack_status(struct nvdimm_device *nvd)
+{
+	return (nvd->status << 16) | nvdimm_is_ok(nvd->status);
+}
+*/
 
 static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, int want_minor);
 
@@ -2188,18 +2197,19 @@ static void handle_nvdimm_msg(struct opal_prd_ctx *ctx, int fd)
 		}
 
 		nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP,
-				nvd->chip_id, nvd->protected);
+				nvd->chip_id, nvdimm_is_ok(nvd->status));
 		break;
 
 	case NVDIMM_QUERY_CHIP_ALL:
 		list_for_each(&ctx->nvd_list, nvd, link)
-			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP, nvd->chip_id, nvd->protected);
+			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP, nvd->chip_id,
+					nvdimm_is_ok(nvd->status));
 		break;
 
 	case NVDIMM_QUERY_CHIP_SET:
 		list_for_each(&ctx->nvd_list, nvd, link) {
 			if (nvd->chip_id == msg.d1) {
-				nvdimm_set_chip_status(ctx, msg.d1, !!msg.d2);
+				nvdimm_set_chip_status(ctx, msg.d1, msg.d2);
 				break;
 			}
 		}
@@ -2378,7 +2388,7 @@ static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, 
 
 			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_BDEV,
 					(major << 16) | minor,
-					nvd->protected);
+					nvdimm_is_ok(nvd->status));
 		}
 
 	next:
@@ -2393,19 +2403,19 @@ static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, 
 
 
 /* XXX: NB: best we can do is localise DIMM failures to a chip */
-static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, bool protected)
+static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, uint32_t status)
 {
 	struct nvdimm_device *nvd;
 
-	pr_log(LOG_ERR, "NVDIMM: Setting nvdimm status for chip %x to %s", c,
-		protected ? "protected" : "failed");
+	pr_log(LOG_ERR, "NVDIMM: Setting status for chip %x to %x (stat: %sprotected)",
+		c, status, nvdimm_is_ok(status) ? "" : "not ");
 
 	list_for_each(&ctx->nvd_list, nvd, link) {
 		/* If we have no NUMA information then assume any failure applies to this chip */
 		if (nvd->chip_id == c || nvd->chip_id == -1) {
-			nvd->protected = protected;
-			nvdimm_fail_bdevs_on_chip(ctx, c, !protected);
-			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_CHIP, c, protected);
+			nvd->status = status;
+			nvdimm_fail_bdevs_on_chip(ctx, c, !nvdimm_is_ok(status));
+			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_CHIP, c, status);
 			break;
 		}
 	}
