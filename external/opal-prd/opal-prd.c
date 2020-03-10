@@ -2395,7 +2395,8 @@ static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, boo
 		protected ? "protected" : "failed");
 
 	list_for_each(&ctx->nvd_list, nvd, link) {
-		if (nvd->chip_id == c) {
+		/* If we have no NUMA information then assume any failure applies to this chip */
+		if (nvd->chip_id == c || nvd->chip_id == -1) {
 			nvd->protected = protected;
 			nvdimm_fail_bdevs_on_chip(ctx, c, !protected);
 			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_CHIP, c, protected);
