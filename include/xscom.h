@@ -197,4 +197,17 @@ extern bool xscom_ok(void);
 extern int64_t xscom_read_cfam_chipid(uint32_t partid, uint32_t *chip_id);
 extern int64_t xscom_trigger_xstop(void);
 
+
+struct fake_scom {
+	uint32_t min_id; /* "chip" id */
+	uint32_t max_id;
+
+	void *private;
+	int64_t (*read)(struct fake_scom *, uint32_t chipid, uint64_t pcbaddr, uint64_t *val);
+	int64_t (*write)(struct fake_scom *, uint32_t chipid, uint64_t pcbaddr, uint64_t val);
+	struct list_node link;
+};
+
+int64_t xscom_register_special(struct fake_scom *f);
+
 #endif /* __XSCOM_H */
