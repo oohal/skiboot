@@ -580,11 +580,57 @@ void _xscom_unlock(void)
 	unlock(&xscom_lock);
 }
 
+static LIST_HEAD(fake_scom_list);
+
+int64_t xscom_register_special(struct fake_scom *f)
+{
+	struct fake_scom *cur;
+
+	// FIXME: handle the min/max properly instead of just using the min
+	list_for_each(&fake_scom_list, cur, link) {
+		if (cur->min_id == f->min_id) {
+			prerror("attemped to add duplicate special scom for id %x\n", f->min_id);
+			return OPAL_BUSY;
+		}
+
+		if (cur->min_id < f->min_id) {
+			list_add_before(&fake_scom_list, &f->link, &cur->link);
+			return 0;
+		}
+	}
+
+	list_add(&fake_scom_list, &f->link);
+
+	return 0;
+}
+
+static struct fake_scom *xscom_find_special(uint32_t partid)
+{
+	struct fake_scom *cur;
+
+	list_for_each(&fake_scom_list, cur, link)
+		if (partid >= cur->min_id && partid <= cur->max_id)
+			return cur;
+
+	return NULL;
+}
+
+static int64_t xscom_special_read(struct fake_scom *f, uint32_t partid, uint32_t pcbaddr, uint64_t *val)
+{
+	return f->read(f, partid, pcbaddr, val);
+}
+
+static int64_t xscom_special_write(struct fake_scom *f, uint32_t partid, uint32_t pcbaddr, uint64_t val)
+{
+	return f->write(f, partid, pcbaddr, val);
+}
+
 /*
  * External API
  */
 int _xscom_read(uint32_t partid, uint64_t pcb_addr, uint64_t *val, bool take_lock)
 {
+	struct fake_scom *f;
 	uint32_t gcid;
 	int rc;
 
@@ -611,6 +657,11 @@ int _xscom_read(uint32_t partid, uint64_t pcb_addr, uint64_t *val, bool take_loc
 			return OPAL_UNSUPPORTED;
 		break;
 	default:
+		/* is it one of our hacks? */
+		f = xscom_find_special(partid);
+		if (f)
+			return xscom_special_read(f, partid, pcb_addr, val);
+
 		/**
 		 * @fwts-label XSCOMReadInvalidPartID
 		 * @fwts-advice xscom_read was called with an invalid partid.
@@ -652,6 +703,7 @@ opal_call(OPAL_XSCOM_READ, opal_xscom_read, 3);
 
 int _xscom_write(uint32_t partid, uint64_t pcb_addr, uint64_t val, bool take_lock)
 {
+	struct fake_scom *f;
 	uint32_t gcid;
 	int rc;
 
@@ -666,6 +718,11 @@ int _xscom_write(uint32_t partid, uint64_t pcb_addr, uint64_t val, bool take_loc
 		gcid = xscom_decode_chiplet(partid, &pcb_addr);
 		break;
 	default:
+		/* is it one of our hacks? */
+		f = xscom_find_special(partid);
+		if (f)
+			return xscom_special_write(f, partid, pcb_addr, val);
+
 		/**
 		 * @fwts-label XSCOMWriteInvalidPartID
 		 * @fwts-advice xscom_write was called with an invalid partid.
