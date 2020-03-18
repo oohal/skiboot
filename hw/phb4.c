@@ -1972,6 +1972,97 @@ static void __unused phb4_dump_peltv(struct phb4 *p)
 	}
 }
 
+static struct ioda_table {
+	int index;
+	const char *name;
+} ioda_table_list[] = {
+	{ IODA3_TBL_LIST, "list", },
+	{ IODA3_TBL_MIST, "mist", },
+	{ IODA3_TBL_RCAM, "rcam", },
+	{ IODA3_TBL_MRT, "mrt", },
+	{ IODA3_TBL_PESTA, "pesta", },
+	{ IODA3_TBL_PESTB, "pestb", },
+	{ IODA3_TBL_TVT, "tvt", },
+	{ IODA3_TBL_TCAM, "tcam", },
+	{ IODA3_TBL_TDR, "tdr", },
+	{ IODA3_TBL_MBT, "mbt", },
+	{ IODA3_TBL_MDT, "mdt", },
+	{ IODA3_TBL_PEEV, "peev", },
+};
+
+static int64_t phb4_fake_scom_write(struct fake_scom *f, uint32_t chipid, uint32_t pcbaddr, uint64_t val)
+{
+	(void) val;
+	(void) chipid;
+	(void) pcbaddr;
+	(void) f;
+
+	return 0;
+}
+
+static int64_t phb4_fake_scom_read(struct fake_scom *f, uint32_t chipid, uint32_t pcbaddr, uint64_t *val)
+{
+	struct phb4 *p = f->private;
+	//int64_t rc = OPAL_XSCOM_ADDR_ERROR;
+
+	phb_lock(&p->phb);
+
+	if (chipid == f->min_id) {
+		// FIXME: broken for the RC config space regs
+		*val = phb4_read_reg(p, pcbaddr);
+	} else {
+		/* otherwise it's an IODA reg, so go read that */
+		phb4_ioda_sel(p, chipid & 0x1f, pcbaddr, false);
+		*val = phb4_read_reg(p, PHB_IODA_DATA0);
+	}
+
+	phb_unlock(&p->phb);
+	return OPAL_SUCCESS;
+}
+
+static void phb4_register_fake_scom(struct phb4 *p)
+{
+	struct fake_scom *f = zalloc(sizeof(*f));
+	struct dt_node *regs, *n;
+	uint32_t chip_id;
+	int i;
+
+	if (!f)
+		return;
+
+	chip_id = (0x2 << 28) | (p->phb.opal_id << 8);
+
+	f->private = p;
+	f->min_id = chip_id;
+	f->max_id = chip_id + 31; // 5 IODA table address bits
+
+	f->read = phb4_fake_scom_read;
+	f->write = phb4_fake_scom_write;
+
+	/*
+	 * FIXME: We probably want to have seperate "chip ids" for each
+	 * ioda table so we can give each register range a sensible
+	 * name.
+	 */
+	if (xscom_register_special(f)) {
+		PHBERR(p, "unable to add the fake scoms\n");
+		return;
+	}
+
+	regs = dt_new(p->phb.dt_node, "regs");
+	dt_add_property(regs, "scom-controller", NULL, 0);
+	dt_add_property_cells(regs, "ibm,chip-id", chip_id);
+
+	for (i = 0; i < ARRAY_SIZE(ioda_table_list); i++) {
+		int index = ioda_table_list[i].index;
+
+		n = dt_new_addr(regs, ioda_table_list[i].name, index);
+
+		dt_add_property(n, "scom-controller", NULL, 0);
+		dt_add_property_cells(n, "ibm,chip-id", chip_id | index);
+	}
+}
+
 static void __unused phb4_dump_ioda_table(struct phb4 *p, int table)
 {
 	const char *name;
@@ -5808,6 +5899,8 @@ static void phb4_create(struct dt_node *np)
 		platform.pci_setup_phb(&p->phb, p->index);
 
 	dt_add_property_string(np, "status", "okay");
+
+	phb4_register_fake_scom(p);
 
 	return;
 
