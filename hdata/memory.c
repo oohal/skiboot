@@ -594,6 +594,8 @@ static void add_memory_buffer_mmio(const struct HDIF_common_hdr *msarea)
 
 		/* FIXME: we could add some more meaningful names */
 		regs = dt_new_addr(membuf, "regs", start);
+		if (start & 0x8000000)
+			end = start - 0x8000000ul + 0x80000000ul - 1ul; // hack xscom range to 2GB
 		dt_add_property_u64s(regs, "reg", start, end - start + 1);
 		dt_add_property_u64s(regs, "flags", be64_to_cpu(mmio->flags));
 	}
