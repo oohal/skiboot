@@ -615,14 +615,22 @@ static struct fake_scom *xscom_find_special(uint32_t partid)
 	return NULL;
 }
 
-static int64_t xscom_special_read(struct fake_scom *f, uint32_t partid, uint32_t pcbaddr, uint64_t *val)
+static int64_t xscom_special_read(struct fake_scom *f, uint32_t partid, uint64_t pcbaddr, uint64_t *val)
 {
-	return f->read(f, partid, pcbaddr, val);
+	int64_t rc = f->read(f, partid, pcbaddr, val);
+
+	prerror("%s: to %x off: %llx rc = %lld\n", __func__, partid, pcbaddr, rc);
+
+	return rc;
 }
 
-static int64_t xscom_special_write(struct fake_scom *f, uint32_t partid, uint32_t pcbaddr, uint64_t val)
+static int64_t xscom_special_write(struct fake_scom *f, uint32_t partid, uint64_t pcbaddr, uint64_t val)
 {
-	return f->write(f, partid, pcbaddr, val);
+	int64_t rc = f->write(f, partid, pcbaddr, val);
+
+	prerror("%s: to %x off: %llx rc = %lld\n", __func__, partid, pcbaddr, rc);
+
+	return rc;
 }
 
 /*
