@@ -657,8 +657,8 @@ int _xscom_read(uint32_t partid, uint64_t pcb_addr, uint64_t *val, bool take_loc
 	case 0: /* Normal processor chip */
 		gcid = partid;
 		break;
-	case 8: /* Centaur */
-		return centaur_xscom_read(partid, pcb_addr, val);
+//	case 8: /* Centaur */
+//		return centaur_xscom_read(partid, pcb_addr, val);
 	case 4: /* EX chiplet */
 		gcid = xscom_decode_chiplet(partid, &pcb_addr);
 		if (pcb_addr == 0)
