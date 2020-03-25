@@ -55,9 +55,16 @@ struct HDIF_ms_area_address_range {
 #define   PHYS_ATTR_STATUS_NOT_SAVED	0x08
 #define   PHYS_ATTR_STATUS_MEM_INVALID	0xff
 
+/* Memory Controller ID for Nimbus P9 systems */
 #define MS_CONTROLLER_MCBIST_ID(id)	GETFIELD(PPC_BITMASK32(0, 1), id)
 #define MS_CONTROLLER_MCS_ID(id)	GETFIELD(PPC_BITMASK32(4, 7), id)
 #define MS_CONTROLLER_MCA_ID(id)	GETFIELD(PPC_BITMASK32(8, 15), id)
+
+/* Memory Controller ID for P9 AXONE systems */
+#define MS_CONTROLLER_MC_ID(id)		GETFIELD(PPC_BITMASK32(0, 1), id)
+#define MS_CONTROLLER_MI_ID(id)		GETFIELD(PPC_BITMASK32(4, 7), id)
+#define MS_CONTROLLER_MCC_ID(id)	GETFIELD(PPC_BITMASK32(8, 15), id)
+#define MS_CONTROLLER_OMI_ID(id)	GETFIELD(PPC_BITMASK32(16, 31), id)
 
 struct HDIF_ms_area_id {
 	__be16 id;
@@ -71,6 +78,20 @@ struct HDIF_ms_area_id {
 #define MS_AREA_SHARED		0x2000
 	__be16 flags;
 	__be16 share_id;
+} __packed;
+
+
+// FIXME: it should be 9, current HDATs are broken
+#define MSAREA_IDATA_MMIO_IDX 8
+struct HDIF_ms_area_ocmb_mmio {
+	__be64 range_start;
+	__be64 range_end;
+	__be32 controller_id;
+	__be32 proc_chip_id;
+	__be64 hbrt_id;
+#define OCMB_SCOM_8BYTE_ACCESS	PPC_BIT(0)
+#define OCMB_SCOM_4BYTE_ACCESS	PPC_BIT(1)
+	__be64 flags;
 } __packed;
 
 static void append_chip_id(struct dt_node *mem, u32 id)
@@ -366,7 +387,7 @@ static void vpd_parse_spd(struct dt_node *dimm, const char *spd, u32 size)
 	dt_add_property_cells(dimm, "manufacturer-id", be16_to_cpu(*vendor));
 }
 
-static void add_mca_dimm_info(struct dt_node *mca,
+static void add_dimm_info(struct dt_node *parent,
 			      const struct HDIF_common_hdr *msarea)
 {
 	unsigned int i, size;
@@ -394,11 +415,11 @@ static void add_mca_dimm_info(struct dt_node *mca,
 			continue;
 
 		/* Use Resource ID to add dimm node */
-		dimm = dt_find_by_name_addr(mca, "dimm",
+		dimm = dt_find_by_name_addr(parent, "dimm",
 					    be16_to_cpu(fru_id->rsrc_id));
 		if (dimm)
 			continue;
-		dimm= dt_new_addr(mca, "dimm", be16_to_cpu(fru_id->rsrc_id));
+		dimm= dt_new_addr(parent, "dimm", be16_to_cpu(fru_id->rsrc_id));
 		assert(dimm);
 		dt_add_property_cells(dimm, "reg", be16_to_cpu(fru_id->rsrc_id));
 
@@ -439,20 +460,12 @@ static inline void dt_add_mem_reg_property(struct dt_node *node, u64 addr)
 	dt_add_property_cells(node, "reg", addr);
 }
 
-static void add_memory_controller(const struct HDIF_common_hdr *msarea,
+static void add_memory_controller_p9n(const struct HDIF_common_hdr *msarea,
 				  const struct HDIF_ms_area_address_range *arange)
 {
-	uint32_t chip_id, version;
+	uint32_t chip_id;
 	uint32_t controller_id, mcbist_id, mcs_id, mca_id;
 	struct dt_node *xscom, *mcbist, *mcs, *mca;
-
-	/*
-	 * Memory hierarchy may change between processor version. Presently
-	 * it's only creating memory hierarchy for P9 (Nimbus) and P9P (Axone).
-	 */
-	version = PVR_TYPE(mfspr(SPR_PVR));
-	if (version != PVR_TYPE_P9 && version != PVR_TYPE_P9P)
-		return;
 
 	chip_id = pcid_to_chip_id(be32_to_cpu(arange->chip));
 	controller_id = be32_to_cpu(arange->controller_id);
@@ -489,7 +502,118 @@ static void add_memory_controller(const struct HDIF_common_hdr *msarea,
 		dt_add_mem_reg_property(mca, mca_id);
 	}
 
-	add_mca_dimm_info(mca, msarea);
+	add_dimm_info(mca, msarea);
+}
+
+static void add_memory_buffer_mmio(const struct HDIF_common_hdr *msarea)
+{
+	struct dt_node *membuf;
+	const struct HDIF_ms_area_ocmb_mmio *mmio;
+	unsigned int i, count;
+	const struct HDIF_array_hdr *array;
+	uint64_t min_addr = ~0ull, hbrt_id = 0;
+
+	if (be32_to_cpu(msarea->version) < 0x50) {
+		prlog(PR_WARNING, "MS AREA: Inconsistent MSAREA version %x for P9P system",
+			be32_to_cpu(msarea->version));
+		return;
+	}
+
+	array = HDIF_get_iarray(msarea, MSAREA_IDATA_MMIO_IDX, &count);
+	if (!array || count <= 0) {
+		prerror("MS AREA: No OCMB MMIO array at MS Area %p\n", msarea);
+		return;
+	}
+
+	/* build the arrays we're going to pack into the DT node
+	 *
+	 * XXX: might be nice if we could do something like:
+	 *
+	 * obmc@<blah> {
+	 * 	ranges; // 1-1 system to bus address translation
+	 *
+	 * 	opencapi-config@<blah2> {
+	 *
+	 * 	};
+	 * 	microsemi-regs@<blah3> {
+	 * 		...
+	 *	}
+	 *	ibm-scom@<blah4> {
+	 *		...
+	 *	}
+	 * }
+	 *
+	 */
+
+	/* find a unit address for our memory-controller@ node */
+	HDIF_iarray_for_each(array, i, mmio) {
+		uint64_t start = be64_to_cpu(mmio->range_start);
+
+		if (start < min_addr)
+			min_addr = start;
+
+		/* and pick up the chip id along the way */
+		hbrt_id = be64_to_cpu(mmio->hbrt_id);
+		prerror("%d - %"PRIx64"\n", i, hbrt_id);
+	}
+
+	membuf = dt_find_by_name_addr(dt_root, "memory-buffer", min_addr);
+	if (membuf) {
+		prerror("attempted to create a duplicate of %s\n", membuf->name);
+		return;
+	}
+
+	membuf = dt_new_addr(dt_root, "memory-buffer", min_addr);
+	assert(membuf);
+
+	dt_add_property_string(membuf, "compatible", "ibm,explorer");
+	dt_add_property(membuf, "ranges", NULL, 0);
+	dt_add_property_cells(membuf, "ibm,chip-id", hbrt_id);
+	dt_add_property_u64s(membuf, "base-addr", min_addr);
+
+	dt_add_property_cells(membuf, "#size-cells", 2);
+	dt_add_property_cells(membuf, "#address-cells", 2);
+
+	HDIF_iarray_for_each(array, i, mmio) {
+		struct dt_node *regs;
+		uint64_t start, end;
+
+		start = cleanup_addr(be64_to_cpu(mmio->range_start));
+		end   = cleanup_addr(be64_to_cpu(mmio->range_end));
+
+		/*
+		 * To support different chip-ids we'd need to create a new
+		 * memory-controller node with that hbrt_id. I'm not expecting
+		 * that to ever happen, but put in a warning.
+		 */
+		if (hbrt_id != be64_to_cpu(mmio->hbrt_id)) {
+			prerror("hbrt_id mismatch: got %"PRIx64", expected %"PRIx64"\n",
+				be64_to_cpu(mmio->hbrt_id), hbrt_id);
+			continue;
+		}
+
+		/* FIXME: we could add some more meaningful names */
+		regs = dt_new_addr(membuf, "regs", start);
+		dt_add_property_u64s(regs, "reg", start, end - start + 1);
+		dt_add_property_u64s(regs, "flags", be64_to_cpu(mmio->flags));
+	}
+}
+
+static void add_memory_controller(const struct HDIF_common_hdr *msarea,
+				  const struct HDIF_ms_area_address_range *arange)
+{
+	const uint32_t version = PVR_TYPE(mfspr(SPR_PVR));
+	/*
+	 * Memory hierarchy may change between processor version. Presently
+	 * it's only creating memory hierarchy for P9 (Nimbus) and P9P (Axone).
+	 */
+
+	if (version == PVR_TYPE_P9)
+		return add_memory_controller_p9n(msarea, arange);
+	else if (version == PVR_TYPE_P9P)
+		return; //return add_memory_controller_p9p(msarea, arange);
+	else
+		return;
 }
 
 static void get_msareas(struct dt_node *root,
@@ -568,6 +692,8 @@ static void get_msareas(struct dt_node *root,
 
 		/* Add RAM Area VPD */
 		vpd_add_ram_area(msarea);
+
+		add_memory_buffer_mmio(msarea);
 
 		/* This offset is from the arr, not the header! */
 		arange = (void *)arr + be32_to_cpu(arr->offset);
