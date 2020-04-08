@@ -2162,12 +2162,10 @@ static void nvdimm_debug_dump_status(char **output)
 	*output = buf;
 }
 
-/*
-static uint32_t nvdimm_pack_status(struct nvdimm_device *nvd)
+static uint32_t nvdimm_pack_status(uint32_t status)
 {
-	return (nvd->status << 16) | nvdimm_is_ok(nvd->status);
+	return (status << 16) | nvdimm_is_ok(status);
 }
-*/
 
 static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, int want_minor);
 
@@ -2175,6 +2173,7 @@ static void handle_nvdimm_msg(struct opal_prd_ctx *ctx, int fd)
 {
 	struct nvdimm_device *nvd = NULL;
 	struct nvdimm_msg msg;
+	uint32_t packed;
 	int rc;
 
 	rc = recv(fd, &msg, sizeof(msg), 0);
@@ -2196,14 +2195,17 @@ static void handle_nvdimm_msg(struct opal_prd_ctx *ctx, int fd)
 			goto err;
 		}
 
+		packed = nvdimm_pack_status(nvd->status);
 		nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP,
-				nvd->chip_id, nvdimm_is_ok(nvd->status));
+				nvd->chip_id, packed);
 		break;
 
 	case NVDIMM_QUERY_CHIP_ALL:
-		list_for_each(&ctx->nvd_list, nvd, link)
-			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP, nvd->chip_id,
-					nvdimm_is_ok(nvd->status));
+		list_for_each(&ctx->nvd_list, nvd, link) {
+			packed = nvdimm_pack_status(nvd->status);
+			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_CHIP,
+					nvd->chip_id, packed);
+		}
 		break;
 
 	case NVDIMM_QUERY_CHIP_SET:
@@ -2283,9 +2285,11 @@ bool has_file(int dirfd, const char *path)
  * 2. find all the block devices associated with that notice
  * 3. mark all their devices as RO
  */
-static void nvdimm_fail_bdevs_on_chip(struct opal_prd_ctx *ctx, uint32_t c, int set_ro)
+static void nvdimm_fail_bdevs_on_chip(struct opal_prd_ctx *ctx, uint32_t c,
+				      uint32_t status)
 {
 	int sysblock_fd = open("/sys/block/", O_RDONLY);
+	int set_ro = !nvdimm_is_ok(status);
 	struct dirent **names;
 	int i, n;
 
@@ -2332,7 +2336,8 @@ static void nvdimm_fail_bdevs_on_chip(struct opal_prd_ctx *ctx, uint32_t c, int 
 			pr_log(LOG_NOTICE, "NVDIMM: Marked %s (%d:%d) as %s",
 				names[i]->d_name, major, minor, set_ro ? "ro" : "rw");
 			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_BDEV,
-					    (major << 16) | minor, set_ro);
+					    (major << 16) | minor,
+					    nvdimm_pack_status(status));
 		}
 
 	next:
@@ -2388,7 +2393,7 @@ static bool nvdimm_check_bdev(struct opal_prd_ctx *ctx, int fd, int want_major, 
 
 			nvdimm_send_msg(ctx, fd, NVDIMM_REPLY_BDEV,
 					(major << 16) | minor,
-					nvdimm_is_ok(nvd->status));
+					nvdimm_pack_status(nvd->status));
 		}
 
 	next:
@@ -2414,8 +2419,9 @@ static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, uin
 		/* If we have no NUMA information then assume any failure applies to this chip */
 		if (nvd->chip_id == c || nvd->chip_id == -1) {
 			nvd->status = status;
-			nvdimm_fail_bdevs_on_chip(ctx, c, !nvdimm_is_ok(status));
-			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_CHIP, c, status);
+			nvdimm_fail_bdevs_on_chip(ctx, c, status);
+			nvdimm_send_msg_all(ctx, NVDIMM_REPLY_CHIP, c,
+					    nvdimm_pack_status(status));
 			break;
 		}
 	}
