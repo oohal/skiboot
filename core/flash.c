@@ -843,6 +843,9 @@ int flash_resource_loaded(enum resource_id id, uint32_t subid)
 	}
 
 	if (resource) {
+		prlog(PR_DEBUG, "Loaded resource %x:%x done %d\n",
+		       resource->id, resource->subid, resource->result);
+
 		rc = resource->result;
 		list_del(&resource->link);
 		free(resource);
