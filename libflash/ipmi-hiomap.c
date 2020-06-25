@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <bmc-dma.h>
 
 #include <ccan/container_of/container_of.h>
 
@@ -286,6 +287,81 @@ static int hiomap_get_flash_info(struct ipmi_hiomap *ctx)
 		prerror("%s failed: %d\n", __func__, res.cc);
 		return FLASH_ERR_PARM_ERROR; /* XXX: Find something better? */
 	}
+
+	return 0;
+}
+
+static int hiomap_dma_read(struct ipmi_hiomap *ctx, uint8_t *buf,
+			   uint64_t pos, uint64_t len, uint64_t *size)
+{
+	struct hiomap_v2_range *range;
+	RESULT_INIT(res, ctx);
+	unsigned char req[6];
+	struct ipmi_msg *msg;
+	int rc;
+
+	lock(&ctx->lock);
+	ctx->window_state = closed_window;
+	unlock(&ctx->lock);
+
+	req[0] = HIOMAP_C_CREATE_READ_WINDOW;
+	req[1] = ++ctx->seq;
+
+	range = (struct hiomap_v2_range *)&req[2];
+
+	/*
+	 * setting the high bit of the 16bit block offset causes the BMC to
+	 * DMA the contents rather than just setting up the LPC window.
+	 */
+	range->offset = cpu_to_le16(0x8000 | bytes_to_blocks(ctx, pos));
+	range->size = cpu_to_le16(bytes_to_blocks_align_up(ctx, pos, len));
+
+	msg = ipmi_mkmsg(IPMI_DEFAULT_INTERFACE,
+		         bmc_platform->sw->ipmi_oem_hiomap_cmd,
+			 ipmi_hiomap_cmd_cb, &res, req, sizeof(req),
+			 2 + 2 + 2 + 2);
+
+	if (!bmc_dma_ok())
+		bmc_dma_reinit(); // might not be configured, so try that first
+	if (!bmc_dma_ok())
+		return FLASH_ERR_CTRL_CONFIG_MISMATCH;
+
+	/* prep for DMA */
+	memset(buf, 0, len);
+	sync();
+
+	rc = bmc_dma_tce_map(buf, 0x10000);
+	if (rc)
+		return rc;
+
+	/* go! */
+	rc = hiomap_queue_msg_sync(ctx, msg);
+
+	bmc_dma_tce_unmap(buf, 0x10000);
+	if (rc)
+		return rc;
+
+	if (res.cc != IPMI_CC_NO_ERROR) {
+		prlog(PR_INFO, "%s failed: %d\n", __func__, res.cc);
+		return FLASH_ERR_PARM_ERROR; /* XXX: Find something better? */
+	}
+
+	lock(&ctx->lock);
+
+	// for DMAs we get the size from the response directly.
+	*size = ctx->current.size;
+
+	if (len != 0 && *size == 0) {
+		unlock(&ctx->lock);
+		prerror("Invalid window properties: len: %"PRIu64", size: %"PRIu64"\n",
+			len, *size);
+		return FLASH_ERR_PARM_ERROR;
+	}
+
+	prlog(PR_DEBUG, "Opened DMA read window from 0x%x for %u bytes at 0x%x\n",
+	      ctx->current.cur_pos, ctx->current.size, ctx->current.lpc_addr);
+
+	unlock(&ctx->lock);
 
 	return 0;
 }
@@ -744,8 +820,11 @@ restore:
 static int ipmi_hiomap_read(struct blocklevel_device *bl, uint64_t pos,
 			    void *buf, uint64_t len)
 {
+	static uint8_t *scratch_buf;
+
 	struct ipmi_hiomap *ctx;
 	uint64_t size;
+	uint64_t olen = len;
 	int rc = 0;
 
 	/* LPC is only 32bit */
@@ -758,26 +837,91 @@ static int ipmi_hiomap_read(struct blocklevel_device *bl, uint64_t pos,
 	if (rc)
 		return rc;
 
-	prlog(PR_TRACE, "Flash read at %#" PRIx64 " for %#" PRIx64 "\n", pos,
-	      len);
+	prlog(PR_TRACE, "Flash read at %#" PRIx64 " for %#" PRIx64 " - %s\n",
+		pos, len, bmc_dma_available() ? "dma" : "mmio");
 	while (len > 0) {
-		/* Move window and get a new size to read */
-		rc = hiomap_window_move(ctx, HIOMAP_C_CREATE_READ_WINDOW, pos,
-				        len, &size);
-		if (rc)
-			return rc;
+		/*
+		 * Use DMA to do the transfer if we can. We use a bounce buffer
+		 * because not all flash reads are going to be aligned to the
+		 * block size. STB headers in particular can ruin things since
+		 * they're 4k and the flash resource loader tries to read
+		 * directly into the user-supplied buffer.
+		 */
+		rc = 1;
+		if (bmc_dma_available()) {
+			uint64_t offset = pos & 0xffff;
+			uint64_t aligned_pos = pos - offset;
+			static int scratches = 0;
 
-		/* Perform the read for this window */
-		rc = lpc_window_read(ctx, pos, buf, size);
-		if (rc)
-			return rc;
+			if (!scratch_buf) {
+//				scratch_buf = local_alloc(0, 65536, 65536);
+				scratch_buf = (void *) 0x10000000;
+				scratches++;
+			};
 
-		/* Check we can trust what we read */
-		lock(&ctx->lock);
-		rc = hiomap_window_valid(ctx, pos, size);
-		unlock(&ctx->lock);
-		if (rc)
-			return rc;
+			rc = hiomap_dma_read(ctx, scratch_buf, aligned_pos,
+					     len, &size);
+
+#if 0
+			/*
+			 * save a copy of the old DMA buf so we've got something
+			 * to look at
+			 */
+			//memcpy(scratch_buf + 0x10000 * scratches, scratch_buf, 0x10000);
+
+			prerror("BUF: %02x %02x %02x %02x %02x %02x %02x %02x -> %p\n",
+				scratch_buf[0],
+				scratch_buf[1],
+				scratch_buf[2],
+				scratch_buf[3],
+				scratch_buf[4],
+				scratch_buf[5],
+				scratch_buf[6],
+				scratch_buf[7],
+				scratch_buf + 0x10000 * scratches++
+				);
+#endif
+
+			if (!rc) { /* worked? */
+				/* whole read is in the requested block */
+				if (size > offset + len) {
+					size = len;
+				} else {
+					size = size - offset;
+				}
+
+				memcpy(buf, &scratch_buf[offset], size);
+			}
+		}
+
+		if (rc) {
+			/* Move window and get a new size to read */
+			rc = hiomap_window_move(ctx, HIOMAP_C_CREATE_READ_WINDOW, pos,
+						len, &size);
+			if (rc)
+				return rc;
+
+			/* Perform the read for this window */
+			rc = lpc_window_read(ctx, pos, buf, size);
+			if (rc)
+				return rc;
+
+			/*
+			 * Check we can trust what we read.
+			 *
+			 * NB: In the DMA path we'll get an error back from the
+			 * create window command.
+			 */
+			lock(&ctx->lock);
+			rc = hiomap_window_valid(ctx, pos, size);
+			unlock(&ctx->lock);
+			if (rc)
+				return rc;
+		}
+
+
+		prlog(PR_TRACE, "read %llu bytes - %llu/%llu\n",
+			size, olen - len, olen);
 
 		len -= size;
 		pos += size;
