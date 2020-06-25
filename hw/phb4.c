@@ -118,6 +118,9 @@
 
 static void phb4_init_hw(struct phb4 *p);
 
+#define PHBTRACE(p, fmt, a...)	prlog(PR_TRACE, "PHB#%04x[%d:%d]: " fmt, \
+				      (p)->phb.opal_id, (p)->chip_id, \
+				      (p)->index,  ## a)
 #define PHBDBG(p, fmt, a...)	prlog(PR_DEBUG, "PHB#%04x[%d:%d]: " fmt, \
 				      (p)->phb.opal_id, (p)->chip_id, \
 				      (p)->index,  ## a)
@@ -1091,6 +1094,163 @@ static int64_t phb4_tce_kill(struct phb *phb, uint32_t kill_type,
 	return phb4_wait_bit(p, PHB_DMARD_SYNC,
 			     PHB_DMARD_SYNC_COMPLETE,
 			     PHB_DMARD_SYNC_COMPLETE);
+}
+
+void phb4_raw_prep(struct phb *phb);
+void phb4_raw_prep(struct phb *phb)
+{
+	struct phb4 *p = phb_to_phb4(phb);
+	uint64_t reg;
+
+	/* disable the in-memory table BARs */
+	out_be64(p->regs + PHB_TCE_SPEC_CTL, 0);
+
+	/* disable the in-memory table BARs */
+	reg = in_be64(p->regs + PHB_RTT_BAR);
+	reg &= ~PHB_RTT_BAR_ENABLE;
+	out_be64(p->regs + PHB_RTT_BAR, 0);
+
+	reg = in_be64(p->regs + PHB_PELTV_BAR);
+	reg &= ~PHB_PELTV_BAR_ENABLE;
+	out_be64(p->regs + PHB_PELTV_BAR, 0);
+
+	reg = in_be64(p->regs + PHB_PEST_BAR);
+	reg &= ~PHB_PEST_BAR_ENABLE;
+	out_be64(p->regs + PHB_PEST_BAR, 0);
+
+	/* Make the RTT/PELTV/PEST BARs being disabled non-fatal */
+
+	/* disable RID and TCE speculation */
+	out_be64(p->regs + PHB_TCE_SPEC_CTL, 0);
+}
+
+/* direct TCE cache manipulation */
+
+/* TCE Cache Register entry */
+
+#define PHB4_TCR_VALID 		PPC_BIT(0)
+#define PHB4_TCR_PENDING 	PPC_BIT(1)
+#define PHB4_TCR_KILL		PPC_BIT(2)
+#define PHB4_TCR_PCI_ADDR	PPC_BITMASK(4, 51) /* PCI bus addr bits 59:12 */
+#define PHB4_TCR_PAGE_SZ	PPC_BITMASK(54, 55) /* page size */
+				/* 0: 4k, 1: 64k, 2: 2MB, 3 1GB */
+
+/* TCE Data register entry */
+
+#define PHB4_TDR_PE_UPPER 	PPC_BITMASK(0,  7) /* PE bits 0:7 */
+#define PHB4_TDR_RPN 		PPC_BITMASK(8,  51) /* 4k PFN */
+#define PHB4_TDR_MDR_PTR	PPC_BITMASK(52, 55) /* migiration table ptr */
+#define PHB4_TDR_PE_LOW		PPC_BITMASK(56, 59) /* PE bits 8:11 */
+#define PHB4_TDR_PERM		PPC_BITMASK(62, 63) /* access permissions */
+				//(0: fault, 1: ro 2: wo 3: rw)
+
+void phb4_tce_map(struct phb *phb, uint64_t host_addr, uint64_t bus)
+{
+	struct phb4 *p = phb_to_phb4(phb);
+	uint64_t tcr, tdr, set;
+	const uint16_t pe_num = 0;
+	/*
+	uint64_t pci_cmp_addr, host_addr;
+	uint64_t cmp_addr = GETFIELD(PHB4_TCR_PCI_ADDR, bus);
+	uint64_t host_addr = GETFIELD(PHB4_TDR_RPN, host);
+	*/
+
+	/*
+	 * Incoming DMAs are matched based on the address and page size in the
+	 * TCR entry. For page sizes greater than 4k the low bits of the stored
+	 * bus address are don't cares.
+	 */
+	tcr = PHB4_TCR_VALID | (PHB4_TCR_PCI_ADDR & bus);
+	tcr = SETFIELD(PHB4_TCR_PAGE_SZ,  tcr, 1); // 64k
+
+	/*
+	 * Once we get a TCR hit the matching TDR value is used to validate the
+	 * access type and translate to the host address.
+	 */
+	tdr = host_addr & PHB4_TDR_RPN;
+//	tdr = SETFIELD(PHB4_TDR_RPN,  tdr, host_addr);
+	tdr = SETFIELD(PHB4_TDR_MDR_PTR,  tdr, 0); // no migration ptr
+	tdr = SETFIELD(PHB4_TDR_PERM, tdr, 3); // R+W
+
+	tdr = SETFIELD(PHB4_TDR_PE_UPPER, tdr, pe_num >> 4);
+	tdr = SETFIELD(PHB4_TDR_PE_LOW,   tdr, pe_num & 0xf);
+
+	/* NB: PE fields are set to zero. If you want a non-zero PE you need to
+	 * do some tedious bit shuffling because a) the number of used PE bits
+	 * depeds on the PHB and the PE is split across to fields.
+	 */
+
+	/*
+	 * The TCE cache is 4-way set associative. Once the page offset is
+	 * removed the low 8 bits of the bus offset are used as the set index.
+	 *
+	 * e.g. for a 32bit DMA the bus address is split as follows:
+	 *
+	 *  4k page: <12 upper address bits><8 bit set idx><12 bit page offset>
+	 * 64k page: < 8 upper address bits><8 bit set idx><16 bit page offset>
+	 */
+	set = (bus >> 16) & 0xff;
+
+	/* FIXME: Check the whole set? */
+
+	// TCR has the valid bit so write TDR first
+	phb4_ioda_sel(p, IODA3_TBL_TDR, set, false);
+	out_be64(p->regs + PHB_IODA_DATA0, tdr);
+	PHBTRACE(p, "wrote TDR[%x] = %016llx\n", (uint32_t) set, tdr);
+
+	phb4_ioda_sel(p, IODA3_TBL_TCAM, set, false);
+	out_be64(p->regs + PHB_IODA_DATA0, tcr);
+	PHBTRACE(p, "wrote TCR[%x] = %016llx\n", (uint32_t) set, tcr);
+
+	/* mapping should now be active, cool */
+	PHBTRACE(p, "Mapped h -> p: %p -> %p\n", (void *) host_addr, (void *) bus);
+}
+
+void phb4_tce_unmap(struct phb *phb)
+{
+	struct phb4 *p = phb_to_phb4(phb);
+
+	/* rather than trying to be smart just nuke everything */
+	assert(this_cpu()->state != cpu_state_os);
+
+	phb4_tce_kill(&p->phb, OPAL_PCI_TCE_KILL_ALL,
+			0, 0,
+			0, 0);
+	PHBTRACE(p, "nuked TCE cache\n");
+}
+
+
+#define PHB4_RCAM_VALID 	PPC_BIT(0)
+#define PHB4_RCAM_PENDING 	PPC_BIT(1)
+#define PHB4_RCAM_KILL		PPC_BIT(2)
+#define PHB4_RCAM_RID		PPC_BITMASK(16,31)
+#define PHB4_RCAM_PE		PPC_BITMASK(39,47)
+
+/* associates the a RID with a PE */
+void phb4_raw_pe_map(struct phb *phb, uint16_t bdfn, uint16_t pe)
+{
+	struct phb4 *p = phb_to_phb4(phb);
+	uint64_t rcam;
+
+	rcam = PHB4_RCAM_VALID;
+	rcam = SETFIELD(PHB4_RCAM_RID, rcam, (uint64_t) bdfn);
+	rcam = SETFIELD(PHB4_RCAM_PE,  rcam, (uint64_t) pe);
+
+	/* NB: RCAM appears to be fully associative */
+	phb4_ioda_sel(p, IODA3_TBL_RCAM, 0, false);
+	out_be64(p->regs + PHB_IODA_DATA0, rcam);
+	PHBTRACE(p, "wrote RCAM[0] = %016llx\n", rcam);
+
+	/* FIXME: we should validate that nothing else is in the cache */
+}
+
+void phb4_raw_pe_unmap(struct phb *phb)
+{
+	struct phb4 *p = phb_to_phb4(phb);
+
+	/* Invalidate the RID Translation Cache (RTC) inside the PHB */
+	out_be64(p->regs + PHB_RTC_INVALIDATE, PHB_RTC_INVALIDATE_ALL);
+	PHBTRACE(p, "Nuked RCAM\n");
 }
 
 /* phb4_ioda_reset - Reset the IODA tables
