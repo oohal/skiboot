@@ -503,4 +503,6 @@ extern int64_t pci_reset(void);
 extern void opal_pci_eeh_set_evt(uint64_t phb_id);
 extern void opal_pci_eeh_clear_evt(uint64_t phb_id);
 
+void pci_reset_phb(void *data);
+
 #endif /* __PCI_H */

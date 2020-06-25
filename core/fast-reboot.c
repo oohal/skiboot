@@ -23,6 +23,7 @@
 #include <ipmi.h>
 #include <direct-controls.h>
 #include <nvram.h>
+#include <bmc-dma.h>
 
 /* Flag tested by the OPAL entry code */
 static volatile bool fast_boot_release;
@@ -445,6 +446,8 @@ void __noreturn fast_reboot_entry(void)
 		for (;;)
 			;
 	}
+
+	bmc_dma_probe();
 
 	ipmi_set_fw_progress_sensor(IPMI_FW_PCI_INIT);
 

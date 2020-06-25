@@ -958,7 +958,7 @@ void pci_device_init(struct phb *phb, struct pci_device *pd)
 	pci_disable_completion_timeout(phb, pd);
 }
 
-static void pci_reset_phb(void *data)
+void pci_reset_phb(void *data)
 {
 	struct phb *phb = data;
 	struct pci_slot *slot = phb->slot;

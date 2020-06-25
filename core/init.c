@@ -47,6 +47,7 @@
 #include <debug_descriptor.h>
 #include <occ.h>
 #include <opal-dump.h>
+#include <bmc-dma.h>
 
 enum proc_gen proc_gen;
 unsigned int pcie_max_link_speed;
@@ -554,6 +555,8 @@ void __noreturn load_and_boot_kernel(bool is_reboot)
 		op_display(OP_FATAL, OP_MOD_INIT, 1);
 		abort();
 	}
+
+	bmc_dma_exit();
 
 	load_initramfs();
 
@@ -1338,6 +1341,9 @@ void __noreturn __nomcount main_cpu_entry(const void *fdt)
 
 	/* Initialize PCI */
 	pci_init_slots();
+
+	/* Get DMA up and running (if we can) */
+	bmc_dma_probe();
 
 	/* Add OPAL timer related properties */
 	late_init_timers();
