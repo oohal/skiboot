@@ -224,6 +224,9 @@ struct phb4 {
 	struct phb		phb;
 };
 
+
+void phb4_eeh_dump_regs(struct phb4 *p);
+
 static inline struct phb4 *phb_to_phb4(struct phb *phb)
 {
 	return container_of(phb, struct phb4, phb);

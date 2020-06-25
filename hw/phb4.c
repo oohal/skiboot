@@ -2347,7 +2347,7 @@ static void __unused phb4_dump_ioda_table(struct phb4 *p, int table)
 	PHBERR(p, "End %s dump\n", name);
 }
 
-static void phb4_eeh_dump_regs(struct phb4 *p)
+void phb4_eeh_dump_regs(struct phb4 *p)
 {
 	struct OpalIoPhb4ErrorData *s;
 	uint16_t reg;
