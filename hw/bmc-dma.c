@@ -1,3 +1,6 @@
+
+#define pr_fmt(fmt)    "BMC-DMA: " fmt
+
 #include <skiboot.h>
 #include <pci.h>
 #include <phb4.h>
@@ -45,6 +48,16 @@ void bmc_dma_probe(void)
 {
 	struct pci_device *bmc;
 	struct phb *phb;
+
+	/*
+	 * We're calling PHB4 specific functions so limit it to PHB4 for now
+	 * most of these are using the generic PHB ops so we can probably
+	 * support other chips too once the callbacks are implemented.
+	 */
+	if (proc_gen != proc_gen_p9) {
+		prlog(PR_DEBUG, "FIXME: only supported on p9\n");
+		return;
+	}
 
 	for_each_phb(phb) {
 		bmc = pci_walk_dev(phb, NULL, match_bmc, NULL);
@@ -237,7 +250,7 @@ void bmc_dma_wait(void)
 
 configure:
 	bmc_dma_reinit();
-	phb4_tce_map(bmc_phb, (uint64_t) dma_buf, MBOX_DMA_BUS_ADDR);
+	phb4_tce_map(bmc_phb, (uint64_t) dma_buf, MBOX_DMA_BUS_ADDR, 64 * 1024);
 
 	/* stay a while and listen */
 	while (memcmp("exit", dma_buf, 4)) {
@@ -272,9 +285,24 @@ configure:
 	prerror("exiting bmc-dma wait loop\n");
 }
 
+/*
+ * In "direct" mode we only support one mapping at a time since
+ * we use the same DMA buffer (at 0x10000000) in all cases.
+ *
+ * FIXME: sort that out at some point.
+ */
+static bool have_mapped;
+void *mapped_addr;
+uint32_t mapped_bytes;
+
 int64_t bmc_dma_tce_unmap(void __unused *buf, size_t __unused size)
 {
 	phb4_tce_unmap(bmc_phb);
+
+	have_mapped = false;
+	mapped_addr = 0;
+	mapped_bytes = 0;
+
 	return OPAL_SUCCESS;
 }
 
@@ -282,9 +310,34 @@ int64_t bmc_dma_tce_map(void *buf, size_t size)
 {
 	if (!bmc_phb)
 		return OPAL_HARDWARE;
-	if (size != 0x10000)
+	/*
+	 * We only allow for aligned DMA buffers. Otherwise we may allow the
+	 * BMC to read/write something it shouldn't.
+	 */
+	if ((uint64_t) buf & 0xffff)
+		return OPAL_UNSUPPORTED;
+	if (size & 0xffff)
 		return OPAL_UNSUPPORTED;
 
-	phb4_tce_map(bmc_phb, (uint64_t) buf, MBOX_DMA_BUS_ADDR);
+	/*
+	 * Limited to 256 sets until we make the tce mapper smarter
+	 */
+	if (size > (256 * 64 * 1024)) {
+		prerror("DMA mapping too long! %zx bytes\n", size);
+		return OPAL_CONSTRAINED;
+	}
+
+	if (have_mapped) {
+		prerror("Can't map [%p,%p) due to exiting mapping of [%p,%p)\n",
+			buf, buf + size - 1,
+			mapped_addr, mapped_addr + mapped_bytes - 1);
+		return OPAL_BUSY;
+	}
+
+
+	phb4_tce_map(bmc_phb, (uint64_t) buf, MBOX_DMA_BUS_ADDR, size);
+	mapped_addr = buf;
+	mapped_bytes = size;
+
 	return OPAL_SUCCESS;
 }

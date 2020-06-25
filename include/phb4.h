@@ -264,7 +264,7 @@ void phb4_pec2_dma_engine_realloc(struct phb4 *p);
 
 
 /* low-level hacks for configuring DMA without the in-memory tables */
-void phb4_tce_map(struct phb *phb, uint64_t host, uint64_t bus);
+void phb4_tce_map(struct phb *phb, uint64_t host, uint64_t bus, uint32_t size);
 void phb4_tce_unmap(struct phb *phb);
 
 void phb4_raw_pe_map(struct phb *phb, uint16_t bdfn, uint16_t pe);

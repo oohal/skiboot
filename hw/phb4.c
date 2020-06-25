@@ -1144,7 +1144,7 @@ void phb4_raw_prep(struct phb *phb)
 #define PHB4_TDR_PERM		PPC_BITMASK(62, 63) /* access permissions */
 				//(0: fault, 1: ro 2: wo 3: rw)
 
-void phb4_tce_map(struct phb *phb, uint64_t host_addr, uint64_t bus)
+static void phb4_tce_map_one(struct phb *phb, uint64_t host_addr, uint64_t bus)
 {
 	struct phb4 *p = phb_to_phb4(phb);
 	uint64_t tcr, tdr, set;
@@ -1204,6 +1204,18 @@ void phb4_tce_map(struct phb *phb, uint64_t host_addr, uint64_t bus)
 
 	/* mapping should now be active, cool */
 	PHBTRACE(p, "Mapped h -> p: %p -> %p\n", (void *) host_addr, (void *) bus);
+}
+
+void phb4_tce_map(struct phb *phb, uint64_t host_addr, uint64_t bus, uint32_t size)
+{
+	int pfns = size / 64 * 1024;
+
+	for (int i = 0; i < pfns; i++) {
+		phb4_tce_map_one(phb, host_addr, bus);
+
+		host_addr += 64 * 1024;
+		bus += 64 * 1024;
+	}
 }
 
 void phb4_tce_unmap(struct phb *phb)
