@@ -330,7 +330,7 @@ static int hiomap_dma_read(struct ipmi_hiomap *ctx, uint8_t *buf,
 	memset(buf, 0, len);
 	sync();
 
-	rc = bmc_dma_tce_map(buf, 0x10000);
+	rc = bmc_dma_tce_map(buf, ALIGN_UP(len, 0x10000));
 	if (rc)
 		return rc;
 

@@ -12,6 +12,9 @@
 
 #define MBOX_DMA_BUS_ADDR 0x10000000
 
+#define USE_BYPASS
+#undef USE_RAW_MODE
+
 struct phb *bmc_phb;
 struct pci_device *bmc_pd;
 
@@ -27,7 +30,6 @@ static int match_bmc(struct phb __unused *phb, struct pci_device *pd, void __unu
 }
 
 struct OpalIoPhb4ErrorData *diag_data;
-void phb4_raw_prep(struct phb *phb);
 
 bool bmc_dma_available(void)
 {
@@ -121,6 +123,37 @@ bool bmc_dma_ok(void)
 	return a;
 }
 
+/* in order to map 0x1000_0000 with 64K pages we need a two level table */
+static uint64_t __align(4096) base_table[512]; /* 4K */
+static uint64_t __align(4096) tce_table[512]; /* 4K */
+
+static void tce_table_map_one(uint64_t host_addr, uint64_t bus_addr)
+{
+	int l1_idx, l0_idx;
+
+	bus_addr >>= 16;
+
+	/* NB: TCE tables are 4k => 512 TCEs => 9 index bits per level */
+	l0_idx = (bus_addr >> 9) & 0x1ff;
+	l1_idx = bus_addr & 0x1ff;
+
+	base_table[l0_idx] = ((uint64_t ) tce_table & ~0xfff)  | 0x3;
+	tce_table[l1_idx]  = ((uint64_t ) host_addr & ~0xffff) | 0x3;
+}
+
+static void tce_table_map(uint64_t host_addr, uint64_t bus_addr, uint32_t size)
+{
+	int pfns = size / (64 * 1024);
+	int i;
+
+	for (i = 0; i < pfns; i++) {
+		tce_table_map_one(host_addr, bus_addr);
+
+		host_addr += 64 * 1024;
+		bus_addr += 64 * 1024;
+	}
+}
+
 void bmc_dma_reinit(void)
 {
 	struct phb *phb = bmc_phb;
@@ -155,26 +188,43 @@ void bmc_dma_reinit(void)
 	}
 
 	/*
+	 * Make sure the bmc device is mapped to PE#0
+	 *
+	 * FIXME: who should be responsible for configuring this?
+	 */
+	phb4_raw_pe_map(phb, bmc_pd->bdfn, 0);
+
+#ifdef USE_RAW_MODE
+	/*
 	 * Clear various in-memory table BARs and disable some errors that
 	 * can escalate to a checkstop. We just want it to fence.
 	 */
-//	phb4_raw_prep(phb);
+	phb4_raw_prep(phb);
 
-	/* make sure the bmc device is mapped to PE#0 */
-	phb4_raw_pe_map(phb, bmc_pd->bdfn, 0);
-
-	/* NB: that addr will checkstop on TCE fetch */
-
-	// setup TVE#0 for iommu with 64K pages
+	// There needs to be at least a one table level (and a table addr)
+	// configured to make the TVE valid. So configure for one level
+	// at a bogus address so we fence if there's an attempt to fetch
+	// a TCE.
 	phb->ops->map_pe_dma_window(phb,
-					0, 1, // pe#0, window#1
-					1, 0xffffffffffffffff, // lvls, tablebase,
-					0x10000, 0x10000); // table size, page size
-
-	// and TVE#1 for bypass, mostly so we have a value at hand which can be
-	// copied into TVE#0 for screwing around
-	phb->ops->map_pe_dma_window_real(phb,
 					0, 0, // pe#0, window#0
+					1, 0xffffffff, // lvls, tablebase,
+					0x1000,        // table size
+					0x10000);      // IO page size
+#else
+	phb->ops->map_pe_dma_window(phb,
+					0,                      // pe#0
+					0,                      // window#0
+					2,                      // lvl
+					(uint64_t) &base_table, // tablebase,
+					0x1000,                 // table size
+					0x10000);               // IO page size
+#endif
+	/*
+	 * Setup TVE#1 for bypass so we've got the TVE value on hand when
+	 * screwing around with cronus.
+	 */
+	phb->ops->map_pe_dma_window_real(phb,
+					0, 1, // pe#0, window#1
 					0x0, 0x80000000); // pci base, pci end
 
 	/* enable memory accesses for memspace enable bits for this dev */
@@ -195,20 +245,20 @@ void bmc_dma_teardown(void)
 	 * these are largely redundant due to the reset below, but i'm keeping
 	 * them here for the sake of illustration.
 	 */
-	phb4_tce_unmap(bmc_phb);
+	phb4_raw_tce_unmap(bmc_phb);
 	phb4_raw_pe_unmap(bmc_phb);
 
 	prerror("Flushing IODA state...\n");
 
-	/* Purge the IODA state before we hand off to the OS */
-	bmc_phb->ops->ioda_reset(bmc_phb, true);
-
-#if 0
-	/* force a phb reset before we hand off the PHB */
+#ifdef USE_RAW_MODE
+	/* force a complete phb reset before we hand off the PHB */
 	bmc_phb->slot->ops.creset(bmc_phb->slot);
 	pci_reset_phb(bmc_phb);
 	prerror("PHB reset done\n");
 	time_wait_ms(1000);
+#else
+	/* Purge the IODA state before we hand off to the OS */
+	bmc_phb->ops->ioda_reset(bmc_phb, true);
 #endif
 }
 
@@ -219,7 +269,7 @@ void bmc_dma_poll(void)
 	prerror("Polling for \"exit\" at 0x80...\n");
 
 	while (memcmp(a, "exit", 4)) {
-		time_wait_ms(10);
+		time_wait_ms(100);
 		sync();
 	}
 
@@ -250,7 +300,7 @@ void bmc_dma_wait(void)
 
 configure:
 	bmc_dma_reinit();
-	phb4_tce_map(bmc_phb, (uint64_t) dma_buf, MBOX_DMA_BUS_ADDR, 64 * 1024);
+	phb4_raw_tce_map(bmc_phb, (uint64_t) dma_buf, MBOX_DMA_BUS_ADDR, 64 * 1024);
 
 	/* stay a while and listen */
 	while (memcmp("exit", dma_buf, 4)) {
@@ -297,7 +347,13 @@ uint32_t mapped_bytes;
 
 int64_t bmc_dma_tce_unmap(void __unused *buf, size_t __unused size)
 {
-	phb4_tce_unmap(bmc_phb);
+#ifndef USE_RAW_MODE
+	/* zap our tables */
+	memset(base_table, 0, sizeof(base_table));
+	memset(tce_table, 0, sizeof(tce_table));
+#endif
+	/* FIXME: use the IODA op */
+	phb4_raw_tce_unmap(bmc_phb);
 
 	have_mapped = false;
 	mapped_addr = 0;
@@ -308,24 +364,18 @@ int64_t bmc_dma_tce_unmap(void __unused *buf, size_t __unused size)
 
 int64_t bmc_dma_tce_map(void *buf, size_t size)
 {
+	uint64_t buf_addr = (uint64_t) buf;
+
 	if (!bmc_phb)
 		return OPAL_HARDWARE;
 	/*
 	 * We only allow for aligned DMA buffers. Otherwise we may allow the
 	 * BMC to read/write something it shouldn't.
 	 */
-	if ((uint64_t) buf & 0xffff)
+	if (buf_addr & 0xffff)
 		return OPAL_UNSUPPORTED;
 	if (size & 0xffff)
 		return OPAL_UNSUPPORTED;
-
-	/*
-	 * Limited to 256 sets until we make the tce mapper smarter
-	 */
-	if (size > (256 * 64 * 1024)) {
-		prerror("DMA mapping too long! %zx bytes\n", size);
-		return OPAL_CONSTRAINED;
-	}
 
 	if (have_mapped) {
 		prerror("Can't map [%p,%p) due to exiting mapping of [%p,%p)\n",
@@ -334,8 +384,19 @@ int64_t bmc_dma_tce_map(void *buf, size_t size)
 		return OPAL_BUSY;
 	}
 
+#ifdef USE_RAW_MODE
+	/* Limited to 256 sets until we make the tce mapper smarter */
+	if (size > (256 * 64 * 1024)) {
+		prerror("DMA mapping too long! %zx bytes\n", size);
+		return OPAL_CONSTRAINED;
+	}
 
-	phb4_tce_map(bmc_phb, (uint64_t) buf, MBOX_DMA_BUS_ADDR, size);
+	phb4_raw_tce_map(bmc_phb, (uint64_t) buf, MBOX_DMA_BUS_ADDR, size);
+#else
+	/* setup our tce table */
+	tce_table_map((uint64_t) buf, MBOX_DMA_BUS_ADDR, size);
+#endif
+
 	mapped_addr = buf;
 	mapped_bytes = size;
 

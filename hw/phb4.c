@@ -1096,7 +1096,6 @@ static int64_t phb4_tce_kill(struct phb *phb, uint32_t kill_type,
 			     PHB_DMARD_SYNC_COMPLETE);
 }
 
-void phb4_raw_prep(struct phb *phb);
 void phb4_raw_prep(struct phb *phb)
 {
 	struct phb4 *p = phb_to_phb4(phb);
@@ -1122,6 +1121,8 @@ void phb4_raw_prep(struct phb *phb)
 
 	/* disable RID and TCE speculation */
 	out_be64(p->regs + PHB_TCE_SPEC_CTL, 0);
+
+	PHBERR(p, "Using raw TCE mode. In-memory tables disabled\n");
 }
 
 /* direct TCE cache manipulation */
@@ -1144,7 +1145,7 @@ void phb4_raw_prep(struct phb *phb)
 #define PHB4_TDR_PERM		PPC_BITMASK(62, 63) /* access permissions */
 				//(0: fault, 1: ro 2: wo 3: rw)
 
-static void phb4_tce_map_one(struct phb *phb, uint64_t host_addr, uint64_t bus)
+static void phb4_raw_tce_map_one(struct phb *phb, uint64_t host_addr, uint64_t bus)
 {
 	struct phb4 *p = phb_to_phb4(phb);
 	uint64_t tcr, tdr, set;
@@ -1168,7 +1169,6 @@ static void phb4_tce_map_one(struct phb *phb, uint64_t host_addr, uint64_t bus)
 	 * access type and translate to the host address.
 	 */
 	tdr = host_addr & PHB4_TDR_RPN;
-//	tdr = SETFIELD(PHB4_TDR_RPN,  tdr, host_addr);
 	tdr = SETFIELD(PHB4_TDR_MDR_PTR,  tdr, 0); // no migration ptr
 	tdr = SETFIELD(PHB4_TDR_PERM, tdr, 3); // R+W
 
@@ -1206,25 +1206,27 @@ static void phb4_tce_map_one(struct phb *phb, uint64_t host_addr, uint64_t bus)
 	PHBTRACE(p, "Mapped h -> p: %p -> %p\n", (void *) host_addr, (void *) bus);
 }
 
-void phb4_tce_map(struct phb *phb, uint64_t host_addr, uint64_t bus, uint32_t size)
+void phb4_raw_tce_map(struct phb *phb, uint64_t host_addr, uint64_t bus_addr, uint32_t size)
 {
-	int pfns = size / 64 * 1024;
+	int pfns = size / (64 * 1024);
+	int i;
 
-	for (int i = 0; i < pfns; i++) {
-		phb4_tce_map_one(phb, host_addr, bus);
+	for (i = 0; i < pfns; i++) {
+		phb4_raw_tce_map_one(phb, host_addr, bus_addr);
 
 		host_addr += 64 * 1024;
-		bus += 64 * 1024;
+		bus_addr += 64 * 1024;
 	}
 }
 
-void phb4_tce_unmap(struct phb *phb)
+void phb4_raw_tce_unmap(struct phb *phb)
 {
 	struct phb4 *p = phb_to_phb4(phb);
 
-	/* rather than trying to be smart just nuke everything */
+	/* TODO: add handshaking */
 	assert(this_cpu()->state != cpu_state_os);
 
+	/* rather than trying to be smart just nuke everything */
 	phb4_tce_kill(&p->phb, OPAL_PCI_TCE_KILL_ALL,
 			0, 0,
 			0, 0);
