@@ -1194,11 +1194,11 @@ static void phb4_raw_tce_map_one(struct phb *phb, uint64_t host_addr, uint64_t b
 	/* FIXME: Check the whole set? */
 
 	// TCR has the valid bit so write TDR first
-	phb4_ioda_sel(p, IODA3_TBL_TDR, set, false);
+	phb4_ioda_sel(p, IODA3_TBL_TDR, set * 4, false);
 	out_be64(p->regs + PHB_IODA_DATA0, tdr);
 	PHBTRACE(p, "wrote TDR[%x] = %016llx\n", (uint32_t) set, tdr);
 
-	phb4_ioda_sel(p, IODA3_TBL_TCAM, set, false);
+	phb4_ioda_sel(p, IODA3_TBL_TCAM, set * 4, false);
 	out_be64(p->regs + PHB_IODA_DATA0, tcr);
 	PHBTRACE(p, "wrote TCR[%x] = %016llx\n", (uint32_t) set, tcr);
 
