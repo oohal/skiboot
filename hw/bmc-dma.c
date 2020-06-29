@@ -264,7 +264,11 @@ void bmc_dma_teardown(void)
 
 void bmc_dma_poll(void)
 {
-	char *a = (char *) 0x80;
+	uint32_t old;
+	uint32_t *a = (uint32_t *) 0x80;
+
+	old = *a;
+	sync();
 
 	prerror("Polling for \"exit\" at 0x80...\n");
 
@@ -273,8 +277,7 @@ void bmc_dma_poll(void)
 		sync();
 	}
 
-	memset(a, 0, 4);
-	*a = 0;
+	*a = old;
 	sync();
 }
 
