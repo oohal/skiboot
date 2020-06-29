@@ -309,6 +309,10 @@ again:
 	req[0] = HIOMAP_C_CREATE_READ_WINDOW;
 	req[1] = ++ctx->seq;
 
+	/* max we can DMA map */
+	if (len > (8 * 1024 * 1024))
+		len = 8 * 1024 * 1024;
+
 	range = (struct hiomap_v2_range *)&req[2];
 
 	/*
