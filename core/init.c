@@ -80,11 +80,7 @@ struct debug_descriptor debug_descriptor = {
 	.trace_mask	= 0, /* All traces disabled by default */
 	/* console log level:
 	 *   high 4 bits in memory, low 4 bits driver (e.g. uart). */
-#ifdef DEBUG
 	.console_log_levels = (PR_TRACE << 4) | PR_DEBUG,
-#else
-	.console_log_levels = (PR_DEBUG << 4) | PR_NOTICE,
-#endif
 };
 
 static void checksum_romem(void);

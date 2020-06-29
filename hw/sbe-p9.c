@@ -274,10 +274,11 @@ static int p9_sbe_msg_send(struct p9_sbe *sbe, struct p9_sbe_msg *msg)
 	if (rc != OPAL_SUCCESS)
 		return rc;
 
+#if 0
 	prlog(PR_TRACE, "Message queued [chip id = 0x%x]:\n", sbe->chip_id);
 	for (i = 0; i < 4; i++)
 		prlog(PR_TRACE, "    Reg%d : %016llx\n", i, msg->reg[i]);
-
+#endif
 	msg->timeout = mftb() + msecs_to_tb(SBE_CMD_TIMEOUT_MAX);
 	sbe->state = sbe_mbox_send;
 	msg->state = sbe_msg_sent;
@@ -309,10 +310,10 @@ static void p9_sbe_msg_complete(struct p9_sbe *sbe, struct p9_sbe_msg *msg,
 				enum p9_sbe_msg_state msg_state)
 {
 	void (*comp)(struct p9_sbe_msg *msg);
-
+#if 0
 	prlog(PR_TRACE, "Completing msg [chip id = %x], reg0 : 0x%llx\n",
 	      sbe->chip_id, msg->reg[0]);
-
+#endif
 	comp = msg->complete;
 	list_del(&msg->link);
 	sync();

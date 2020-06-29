@@ -12,8 +12,8 @@
 
 #define MBOX_DMA_BUS_ADDR 0x10000000
 
-#define USE_BYPASS
-#undef USE_RAW_MODE
+#undef USE_BYPASS
+#define USE_RAW_MODE
 
 struct phb *bmc_phb;
 struct pci_device *bmc_pd;
@@ -141,7 +141,7 @@ static void tce_table_map_one(uint64_t host_addr, uint64_t bus_addr)
 	tce_table[l1_idx]  = ((uint64_t ) host_addr & ~0xffff) | 0x3;
 }
 
-static void tce_table_map(uint64_t host_addr, uint64_t bus_addr, uint32_t size)
+static void __unused tce_table_map(uint64_t host_addr, uint64_t bus_addr, uint32_t size)
 {
 	int pfns = size / (64 * 1024);
 	int i;
@@ -205,9 +205,16 @@ void bmc_dma_reinit(void)
 	// configured to make the TVE valid. So configure for one level
 	// at a bogus address so we fence if there's an attempt to fetch
 	// a TCE.
+	//
+	//
+	// NB: The PHB uses the number of levels, table size and page size
+	// to validate if a DMA address is within the mappable range. To
+	// use our raw mode hack to hit 0x1000_0000 you need to ensure the
+	// DMAable range is large enough so we use 2 levels.
 	phb->ops->map_pe_dma_window(phb,
 					0, 0, // pe#0, window#0
-					1, 0xffffffff, // lvls, tablebase,
+					2,                  // levels
+					0xffffffffffffffff, // fake tablebase,
 					0x1000,        // table size
 					0x10000);      // IO page size
 #else

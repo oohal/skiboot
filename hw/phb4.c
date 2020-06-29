@@ -1211,12 +1211,15 @@ void phb4_raw_tce_map(struct phb *phb, uint64_t host_addr, uint64_t bus_addr, ui
 	int pfns = size / (64 * 1024);
 	int i;
 
+	phb_lock(phb);
+
 	for (i = 0; i < pfns; i++) {
 		phb4_raw_tce_map_one(phb, host_addr, bus_addr);
 
 		host_addr += 64 * 1024;
 		bus_addr += 64 * 1024;
 	}
+	phb_unlock(phb);
 }
 
 void phb4_raw_tce_unmap(struct phb *phb)
@@ -1226,11 +1229,14 @@ void phb4_raw_tce_unmap(struct phb *phb)
 	/* TODO: add handshaking */
 	assert(this_cpu()->state != cpu_state_os);
 
+	phb_lock(phb);
 	/* rather than trying to be smart just nuke everything */
 	phb4_tce_kill(&p->phb, OPAL_PCI_TCE_KILL_ALL,
 			0, 0,
 			0, 0);
 	PHBTRACE(p, "nuked TCE cache\n");
+	time_wait_ms(10); // give the PHB a break...
+	phb_unlock(phb);
 }
 
 

@@ -299,7 +299,9 @@ static int hiomap_dma_read(struct ipmi_hiomap *ctx, uint8_t *buf,
 	unsigned char req[6];
 	struct ipmi_msg *msg;
 	int rc;
+	bool failed = false;
 
+again:
 	lock(&ctx->lock);
 	ctx->window_state = closed_window;
 	unlock(&ctx->lock);
@@ -320,7 +322,6 @@ static int hiomap_dma_read(struct ipmi_hiomap *ctx, uint8_t *buf,
 		         bmc_platform->sw->ipmi_oem_hiomap_cmd,
 			 ipmi_hiomap_cmd_cb, &res, req, sizeof(req),
 			 2 + 2 + 2 + 2);
-
 	if (!bmc_dma_ok())
 		bmc_dma_reinit(); // might not be configured, so try that first
 	if (!bmc_dma_ok())
@@ -334,8 +335,21 @@ static int hiomap_dma_read(struct ipmi_hiomap *ctx, uint8_t *buf,
 	if (rc)
 		return rc;
 
+	if (failed) {
+		prerror("pre-dma wait\n");
+		bmc_dma_poll();
+	}
 	/* go! */
 	rc = hiomap_queue_msg_sync(ctx, msg);
+
+	if (!bmc_dma_ok()) {
+		/* inspect the entrails */
+		bmc_dma_poll();
+
+		bmc_dma_reinit();
+		failed = true;
+		goto again;
+	}
 
 	bmc_dma_tce_unmap(buf, 0x10000);
 	if (rc)
